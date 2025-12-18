@@ -4,11 +4,13 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 require('dotenv').config();
 
+const authRoutes = require('./routes/authRoutes');
 const envelopeRoutes = require('./routes/envelopeRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const receiptRoutes = require('./routes/receiptRoutes');
 const billRoutes = require('./routes/billRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const { authenticateUser } = require('./middleware/auth.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,12 +27,16 @@ app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', message: 'Spendly API is running' });
 });
 
+app.use('/api/auth', authRoutes);
 app.use('/api/envelopes', envelopeRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/receipts', receiptRoutes);
 app.use('/api/bills', billRoutes);
 app.use('/api/reports', reportRoutes);
 
+app.get('/api/profile', authenticateUser, (req, res) => {
+  res.json({ message: 'Protected route accessed', user: req.user });
+});
 // Error handling
 app.use((err, req, res, next) => {
     console.error(err.stack);
