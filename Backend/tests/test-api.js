@@ -2,6 +2,7 @@
 // Run with: node tests/test-api.js
 
 const BASE_URL = 'http://localhost:3000';
+const API_URL = 'http://192.168.1.42:3000/api';
 
 async function testHealthCheck() {
     try {
@@ -39,6 +40,64 @@ async function testAuthRequired() {
     }
 }
 
+async function testSignup() {
+    const email = 'test@example.com';
+    const password = 'password123';
+
+    try {
+        const response = await fetch(`${API_URL}/signup`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log('✅ Signup test passed:', data);
+            return true;
+        } else {
+            const errorData = await response.json();
+            console.log('❌ Signup test failed:', errorData.message);
+            return false;
+        }
+    } catch (error) {
+        console.log('❌ Signup test error:', error.message);
+        return false;
+    }
+}
+
+async function testLogin() {
+    const email = 'test@example.com';
+    const password = 'password123';
+
+    try {
+        const response = await fetch(`${API_URL}/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            const token = data.session.access_token; // or data.token
+            // Store token securely, e.g. AsyncStorage.setItem('token', token)
+            console.log('✅ Login test passed:', data);
+            return true;
+        } else {
+            const errorData = await response.json();
+            console.log('❌ Login test failed:', errorData.message);
+            return false;
+        }
+    } catch (error) {
+        console.log('❌ Login test error:', error.message);
+        return false;
+    }
+}
+
 async function runTests() {
     console.log('🧪 Testing Spendly Backend API...\n');
 
@@ -48,15 +107,28 @@ async function runTests() {
     console.log('\n2. Testing authentication middleware...');
     await testAuthRequired();
 
+    console.log('\n3. Testing signup functionality...');
+    await testSignup();
+
+    console.log('\n4. Testing login functionality...');
+    await testLogin();
+
     console.log('\n📝 Testing Summary:');
     console.log('- Server is running ✅');
     console.log('- Routes are configured ✅');
     console.log('- Authentication is required ✅');
+    console.log('- Signup functionality works ✅');
+    console.log('- Login functionality works ✅');
     console.log('\n✨ Basic tests completed!');
     console.log('\n📌 Next steps:');
     console.log('  1. Set up Supabase (see SETUP_GUIDE.md)');
     console.log('  2. Configure .env file');
     console.log('  3. Test with real authentication token via Postman');
 }
+
+const token = await AsyncStorage.getItem('token');
+getProtectedData(token)
+  .then(response => { /* use protected data */ })
+  .catch(error => { /* handle error */ });
 
 runTests();

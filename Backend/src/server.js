@@ -9,6 +9,9 @@ const expenseRoutes = require('./routes/expenseRoutes');
 const receiptRoutes = require('./routes/receiptRoutes');
 const billRoutes = require('./routes/billRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const authRoutes = require('./routes/authRoutes');
+const protectedRoutes = require('./routes/protectedRoutes');
+const { authenticateUser } = require('./middleware/auth'); // For Supabase
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,6 +33,8 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/receipts', receiptRoutes);
 app.use('/api/bills', billRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/protected', authenticateUser, protectedRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {
@@ -53,5 +58,7 @@ app.listen(PORT, () => {
     console.log(`🚀 Spendly API server running on port ${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
 });
+
+console.log("Supabase URL:", process.env.SUPABASE_URL);
 
 module.exports = app;
