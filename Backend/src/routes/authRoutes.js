@@ -1,10 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createClient } = require('@supabase/supabase-js');
-
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const { supabase, supabaseAdmin } = require('../config/supabase');
 
 // Signup
 router.post('/signup', async (req, res) => {
@@ -12,6 +8,19 @@ router.post('/signup', async (req, res) => {
   try {
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) return res.status(400).json({ success: false, error: error.message });
+
+    // Insert into user_settings after successful signup
+    const userId = data.user?.id;
+    if (userId) {
+      const { error: settingsError } = await supabaseAdmin
+        .from('user_settings')
+        .insert([{ user_id: userId }]);
+      if (settingsError) {
+        // Log but don't block signup
+        console.error('Failed to create user_settings:', settingsError.message);
+      }
+    }
+
     res.status(201).json({ success: true, message: 'User registered', user: data.user });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

@@ -12,6 +12,7 @@ const reportRoutes = require('./routes/reportRoutes');
 const authRoutes = require('./routes/authRoutes');
 const protectedRoutes = require('./routes/protectedRoutes');
 const { authenticateUser } = require('./middleware/auth'); // For Supabase
+const { supabase } = require('./config/supabase');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -52,6 +53,18 @@ app.use((req, res) => {
         error: 'Route not found'
     });
 });
+
+// Test database connection
+async function testDbConnection() {
+  const { data, error } = await supabase.from('users').select().limit(1);
+  if (error) {
+    console.error('Database connection failed:', error.message);
+  } else {
+    console.log('Database connected successfully!');
+  }
+}
+
+testDbConnection();
 
 // Start server
 app.listen(PORT, () => {
