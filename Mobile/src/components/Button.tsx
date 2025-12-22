@@ -5,6 +5,7 @@ import {
   Text,
   type PressableStateCallbackType,
   type ViewStyle,
+  type StyleProp,
 } from "react-native";
 import { theme } from "../theme/theme";
 
@@ -12,7 +13,9 @@ export function Button(props: {
   label: string;
   onPress: () => void;
   variant?: "primary" | "secondary" | "ghost";
-  style?: ViewStyle;
+  // style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
+
   disabled?: boolean;
 }) {
   const variant = props.variant ?? "primary";
