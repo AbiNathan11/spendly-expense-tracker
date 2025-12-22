@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useMemo, useReducer } from "react";
 import { formatMoney } from "../utils/format";
+import { authService, type AuthResponse } from "../services/authService";
 
 export type Transaction = {
   id: string;
@@ -42,11 +43,15 @@ type State = {
   goals: Goal[];
   currency: string;
   dailyLimit: number;
+  authLoading: boolean;
+  authError: string | null;
 };
 
 type Action =
-  | { type: "AUTH/LOGIN"; payload: { email: string; name?: string } }
+  | { type: "AUTH/LOGIN"; payload: { email: string; name?: string; token?: string } }
   | { type: "AUTH/LOGOUT" }
+  | { type: "AUTH/ERROR"; payload: { error: string } }
+  | { type: "AUTH/LOADING"; payload: { loading: boolean } }
   | { type: "PROFILE/UPDATE"; payload: { name: string; email: string } }
   | { type: "PROFILE/AVATAR"; payload: { uri: string } }
   | { type: "TX/ADD"; payload: { envelopeId: string; title: string; amount: number; dateISO: string } }
@@ -74,6 +79,8 @@ const initialState: State = {
   isAuthed: false,
   currency: "USD",
   dailyLimit: 200,
+  authLoading: false,
+  authError: null,
   user: { name: "Alex", email: "alex@example.com", avatar: undefined },
   envelopes: [
     { id: "groceries", name: "Groceries", budget: 400, spent: 250, color: "#9ED9C4" },
@@ -113,13 +120,22 @@ const initialState: State = {
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "AUTH/LOGIN":
-      return {
+      console.log('AUTH/LOGIN reducer called with payload:', action.payload);
+      const newState = {
         ...state,
         isAuthed: true,
-        user: { ...state.user, email: action.payload.email, name: action.payload.name ?? state.user.name },
+        authLoading: false,
+        authError: null,
+        user: { ...state.user, email: action.payload.email, name: action.payload.name || state.user.name },
       };
+      console.log('New user state after AUTH/LOGIN:', newState.user);
+      return newState;
     case "AUTH/LOGOUT":
-      return { ...state, isAuthed: false };
+      return { ...state, isAuthed: false, authError: null };
+    case "AUTH/ERROR":
+      return { ...state, authLoading: false, authError: action.payload.error };
+    case "AUTH/LOADING":
+      return { ...state, authLoading: action.payload.loading, authError: null };
     case "PROFILE/UPDATE":
       return { ...state, user: { ...state.user, name: action.payload.name, email: action.payload.email } };
     case "PROFILE/AVATAR":
@@ -207,9 +223,10 @@ function reducer(state: State, action: Action): State {
 
 type BudgetContextValue = {
   state: State;
-  login: (email: string, name?: string) => void;
+  login: (email: string, password: string, name?: string) => Promise<boolean>;
+  signup: (email: string, password: string, name?: string) => Promise<boolean>;
   logout: () => void;
-  updateProfile: (name: string, email: string) => void;
+  updateProfile: (name: string, email: string, currency?: string, dailyBudget?: number) => Promise<boolean>;
   updateAvatar: (uri: string) => void;
   addTransaction: (args: { envelopeId: string; title: string; amount: number; dateISO?: string }) => void;
   markBillPaid: (billId: string, paid: boolean) => void;
@@ -230,10 +247,116 @@ export function BudgetProvider(props: { children: React.ReactNode }) {
   const value = useMemo<BudgetContextValue>(
     () => ({
       state,
-      login: (email: string, name?: string) => dispatch({ type: "AUTH/LOGIN", payload: { email, name } }),
+      login: async (email: string, password: string, name?: string) => {
+        dispatch({ type: "AUTH/LOADING", payload: { loading: true } });
+        
+        try {
+          const loginResponse = await authService.login({ email, password });
+          
+          console.log('Login response:', loginResponse);
+          
+          if (loginResponse.success) {
+            const userName = loginResponse.user?.name || name || email.split('@')[0];
+            console.log('Setting user name:', userName);
+            console.log('Login response user data:', loginResponse.user);
+            console.log('Full login response:', JSON.stringify(loginResponse, null, 2));
+            
+            dispatch({ 
+              type: "AUTH/LOGIN", 
+              payload: { 
+                email, 
+                name: userName,
+                token: loginResponse.session?.access_token 
+              } 
+            });
+            return true;
+          } else {
+            dispatch({ type: "AUTH/ERROR", payload: { error: loginResponse.error || "Login failed" } });
+            return false;
+          }
+        } catch (error) {
+          dispatch({ type: "AUTH/ERROR", payload: { error: error instanceof Error ? error.message : "Authentication failed" } });
+          return false;
+        }
+      },
+      signup: async (email: string, password: string, name?: string) => {
+        dispatch({ type: "AUTH/LOADING", payload: { loading: true } });
+        
+        try {
+          const signupResponse = await authService.signup({ email, password, name });
+          
+          if (signupResponse.success) {
+            // After successful signup, try login
+            const loginAfterSignup = await authService.login({ email, password });
+            
+            if (loginAfterSignup.success) {
+              dispatch({ 
+                type: "AUTH/LOGIN", 
+                payload: { 
+                  email, 
+                  name: loginAfterSignup.user?.name || name || email.split('@')[0], 
+                  token: loginAfterSignup.session?.access_token 
+                } 
+              });
+              return true;
+            } else {
+              dispatch({ type: "AUTH/ERROR", payload: { error: loginAfterSignup.error || "Login failed after signup" } });
+              return false;
+            }
+          } else {
+            dispatch({ type: "AUTH/ERROR", payload: { error: signupResponse.error || "Signup failed" } });
+            return false;
+          }
+        } catch (error) {
+          dispatch({ type: "AUTH/ERROR", payload: { error: error instanceof Error ? error.message : "Signup failed" } });
+          return false;
+        }
+      },
       logout: () => dispatch({ type: "AUTH/LOGOUT" }),
-      updateProfile: (name: string, email: string) =>
-        dispatch({ type: "PROFILE/UPDATE", payload: { name, email } }),
+      updateProfile: async (name: string, email: string, currency?: string, dailyBudget?: number) => {
+        try {
+          console.log('Updating profile with:', { name, email, currency, dailyBudget });
+          const response = await authService.updateProfile(email, name, currency, dailyBudget);
+          
+          console.log('Profile update response:', response);
+          
+          if (response.success) {
+            // Update local state with the new values
+            console.log('Dispatching PROFILE/UPDATE with:', { name, email });
+            dispatch({ 
+              type: "PROFILE/UPDATE", 
+              payload: { name, email }
+            });
+            
+            // Update currency if provided
+            if (currency) {
+              console.log('Dispatching SETTINGS/CURRENCY with:', { currency });
+              dispatch({ 
+                type: "SETTINGS/CURRENCY", 
+                payload: { currency }
+              });
+            }
+            
+            // Update daily budget if provided
+            if (dailyBudget !== undefined) {
+              console.log('Dispatching SETTINGS/DAILY_LIMIT with:', { limit: dailyBudget });
+              dispatch({ 
+                type: "SETTINGS/DAILY_LIMIT", 
+                payload: { limit: dailyBudget }
+              });
+            }
+            
+            console.log('Profile update completed successfully');
+            return true;
+          } else {
+            console.log('Profile update failed:', response.error);
+            return false;
+          }
+        } catch (error) {
+          console.log('Profile update error:', error);
+          return false;
+        }
+      },
       updateAvatar: (uri: string) => dispatch({ type: "PROFILE/AVATAR", payload: { uri } }),
       addTransaction: (args: { envelopeId: string; title: string; amount: number; dateISO?: string }) =>
         dispatch({
