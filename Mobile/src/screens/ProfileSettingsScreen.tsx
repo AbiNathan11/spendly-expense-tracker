@@ -24,7 +24,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 // Expanded currency list
 const currencies = [
   "USD", "EUR", "GBP", "JPY", "CAD",
-  "AUD", "CHF", "CNY", "INR", "Rupees", "BRL",
+  "AUD", "CHF", "CNY", "INR", "BRL",
   "ZAR", "MXN", "RUB", "KRW", "SGD"
 ];
 
@@ -37,8 +37,6 @@ export function ProfileSettingsScreen() {
 
   const [name, setName] = useState(state.user.name);
   const [email, setEmail] = useState(state.user.email);
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
 
   // Sync state when entering edit mode, or saving
@@ -52,14 +50,19 @@ export function ProfileSettingsScreen() {
     setIsEditing(!isEditing);
   };
 
-  const handleSaveChanges = () => {
-    updateProfile(name.trim() || state.user.name, email.trim() || state.user.email);
-    setIsEditing(false);
-    setCurrencyOpen(false);
-    setShowSuccessBanner(true);
-    setTimeout(() => {
-      setShowSuccessBanner(false);
-    }, 3000);
+  const handleSaveChanges = async () => {
+    const success = await updateProfile(name.trim() || state.user.name, email.trim() || state.user.email, state.currency, state.dailyLimit);
+    
+    if (success) {
+      setIsEditing(false);
+      setCurrencyOpen(false);
+      setShowSuccessBanner(true);
+      setTimeout(() => {
+        setShowSuccessBanner(false);
+      }, 3000);
+    } else {
+      Alert.alert("Error", "Failed to update profile. Please try again.");
+    }
   };
 
   const handleLogout = () => {
@@ -168,27 +171,6 @@ export function ProfileSettingsScreen() {
             )}
           </View>
         </View>
-
-        {isEditing && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Security</Text>
-            <View style={styles.row}>
-              <Text style={styles.label}>New Password</Text>
-              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Unchanged"
-                  secureTextEntry={!showPassword}
-                />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 8 }}>
-                  <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#9CA3AF" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Preferences</Text>

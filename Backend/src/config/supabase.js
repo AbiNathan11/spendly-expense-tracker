@@ -13,7 +13,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Admin client for server-side operations
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+//const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+// Admin client for server-side operations (only if service key exists)
+const supabaseAdmin = supabaseServiceKey 
+  ? createClient(supabaseUrl, supabaseServiceKey)
+  : null;
+
 
 module.exports = {
   supabase,
