@@ -174,3 +174,6 @@ CREATE TRIGGER update_bills_updated_at
 -- Public: true
 -- File size limit: 5MB
 -- Allowed MIME types: image/jpeg, image/png, image/jpg
+
+ALTER TABLE bills
+ADD COLUMN remind_at TIMESTAMP WITH TIME ZONE;
