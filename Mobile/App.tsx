@@ -12,6 +12,7 @@ import { theme } from "./src/theme/theme";
 import { registerForNotifications } from "./src/utils/registerNotifications";
 import "./src/utils/notificationHandler";
 
+
 export default function App() {
 
   useEffect(() => {
