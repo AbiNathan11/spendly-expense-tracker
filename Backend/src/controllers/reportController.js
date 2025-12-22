@@ -1,6 +1,6 @@
 const { supabase } = require('../config/supabase');
 const PDFDocument = require('pdfkit');
-const { startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, format } = require('date-fns');
+const { startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, format, startOfYear, endOfYear, eachMonthOfInterval } = require('date-fns');
 
 /**
  * Get weekly report
@@ -193,6 +193,83 @@ const getMonthlyReport = async (req, res) => {
     }
 };
 
+
+/**
+ * Get yearly report
+ */
+
+const getYearlyReport = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { year } = req.query;
+
+    const yearStart = startOfYear(new Date(year, 0, 1));
+    const yearEnd = endOfYear(new Date(year, 0, 1));
+
+    // Get all expenses for the year
+    const { data: expenses, error } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', format(yearStart, 'yyyy-MM-dd'))
+      .lte('date', format(yearEnd, 'yyyy-MM-dd'));
+
+    if (error) throw error;
+
+    // Monthly breakdown
+    const monthlyData = eachMonthOfInterval({
+      start: yearStart,
+      end: yearEnd
+    }).map(month => {
+      const monthStr = format(month, 'yyyy-MM');
+      const monthExpenses = expenses.filter(e =>
+        e.date.startsWith(monthStr)
+      );
+
+      const total = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+      return {
+        month: format(month, 'MMMM'),
+        total_spent: total,
+        transaction_count: monthExpenses.length
+      };
+    });
+
+    // Envelope breakdown
+    const envelopeData = {};
+    expenses.forEach(expense => {
+      if (!envelopeData[expense.envelope_id]) {
+        envelopeData[expense.envelope_id] = {
+          envelope_id: expense.envelope_id,
+          total: 0,
+          count: 0
+        };
+      }
+      envelopeData[expense.envelope_id].total += expense.amount;
+      envelopeData[expense.envelope_id].count += 1;
+    });
+
+    const yearTotal = expenses.reduce((sum, e) => sum + e.amount, 0);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        year: parseInt(year),
+        total_spent: yearTotal,
+        monthly_breakdown: monthlyData,
+        envelope_breakdown: Object.values(envelopeData)
+      }
+    });
+  } catch (error) {
+    console.error('Get yearly report error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate yearly report'
+    });
+  }
+};
+
+
 /**
  * Generate PDF report
  */
@@ -273,5 +350,6 @@ const generatePDF = async (req, res) => {
 module.exports = {
     getWeeklyReport,
     getMonthlyReport,
+    getYearlyReport,
     generatePDF
 };
