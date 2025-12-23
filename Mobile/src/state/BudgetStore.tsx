@@ -91,7 +91,7 @@ type Action =
 /* ===================== INITIAL STATE ===================== */
 
 const initialState: State = {
-  isAuthed: false,
+  isAuthed: false, // for used non login check
   currency: "USD",
   dailyLimit: 200,
   user: { name: "Alex", email: "alex@example.com" },
