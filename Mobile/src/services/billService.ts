@@ -1,100 +1,193 @@
+// /**
+//  * Bill API Service
+//  */
+
+// import { apiService, ApiResponse } from './api';
+
+// export interface Bill {
+//     id: string;
+//     user_id: string;
+//     name: string;
+//     amount: number;
+//     due_date: string;
+//     category: string;
+//     is_recurring: boolean;
+//     is_paid: boolean;
+//     paid_date?: string;
+//     month: number;
+//     year: number;
+//     created_at: string;
+//     updated_at: string;
+// }
+
+// export interface CreateBillData {
+//     name: string;
+//     amount: number;
+//     due_date: string;
+//     category: string;
+//     month: number;
+//     year: number;
+//     is_recurring?: boolean;
+// }
+
+// export interface UpdateBillData {
+//     name?: string;
+//     amount?: number;
+//     due_date?: string;
+//     category?: string;
+//     is_recurring?: boolean;
+// }
+
+// export interface PayBillData {
+//     envelope_id?: string;
+// }
+
+// class BillService {
+//     /**
+//      * Get all bills (with optional filters)
+//      */
+//     async getBills(params?: {
+//         month?: number;
+//         year?: number;
+//         status?: 'paid' | 'unpaid';
+//     }): Promise<ApiResponse<Bill[]>> {
+//         let endpoint = '/bills';
+
+//         if (params) {
+//             const queryParams = new URLSearchParams();
+//             if (params.month) queryParams.append('month', params.month.toString());
+//             if (params.year) queryParams.append('year', params.year.toString());
+//             if (params.status) queryParams.append('status', params.status);
+
+//             const queryString = queryParams.toString();
+//             if (queryString) {
+//                 endpoint += `?${queryString}`;
+//             }
+//         }
+
+//         return apiService.get<Bill[]>(endpoint);
+//     }
+
+//     /**
+//      * Create new bill
+//      */
+//     async createBill(data: CreateBillData): Promise<ApiResponse<Bill>> {
+//         return apiService.post<Bill>('/bills', data);
+//     }
+
+//     /**
+//      * Update bill
+//      */
+//     async updateBill(id: string, data: UpdateBillData): Promise<ApiResponse<Bill>> {
+//         return apiService.put<Bill>(`/bills/${id}`, data);
+//     }
+
+//     /**
+//      * Delete bill
+//      */
+//     async deleteBill(id: string): Promise<ApiResponse<any>> {
+//         return apiService.delete(`/bills/${id}`);
+//     }
+
+//     /**
+//      * Mark bill as paid
+//      */
+//     async markBillPaid(id: string, data?: PayBillData): Promise<ApiResponse<any>> {
+//         return apiService.post(`/bills/${id}/pay`, data || {});
+//     }
+// }
+
+// export const billService = new BillService();
+
+
 /**
- * Bill API Service
+ * Bill Service – Supabase
  */
 
-import { apiService, ApiResponse } from './api';
+import { supabase } from './supabase';
 
 export interface Bill {
-    id: string;
-    user_id: string;
-    name: string;
-    amount: number;
-    due_date: string;
-    category: string;
-    is_recurring: boolean;
-    is_paid: boolean;
-    paid_date?: string;
-    month: number;
-    year: number;
-    created_at: string;
-    updated_at: string;
+  id: string;
+  user_id: string;
+  name: string;
+  amount: number;
+  due_date: string;
+  category: string;
+  is_recurring: boolean;
+  is_paid: boolean;
+  month: number;
+  year: number;
+  created_at: string;
 }
 
-export interface CreateBillData {
-    name: string;
-    amount: number;
-    due_date: string;
-    category: string;
-    month: number;
-    year: number;
-    is_recurring?: boolean;
-}
+/**
+ * Create Bill
+ */
+export const createBill = async (bill: {
+  name: string;
+  amount: number;
+  due_date: string;
+  category: string;
+  month: number;
+  year: number;
+  is_recurring: boolean;
+}) => {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-export interface UpdateBillData {
-    name?: string;
-    amount?: number;
-    due_date?: string;
-    category?: string;
-    is_recurring?: boolean;
-}
+  if (!user) throw new Error('User not authenticated');
 
-export interface PayBillData {
-    envelope_id?: string;
-}
+  const { data, error } = await supabase.from('bills').insert([
+    {
+      ...bill,
+      user_id: user.id,
+      is_paid: false,
+    },
+  ]);
 
-class BillService {
-    /**
-     * Get all bills (with optional filters)
-     */
-    async getBills(params?: {
-        month?: number;
-        year?: number;
-        status?: 'paid' | 'unpaid';
-    }): Promise<ApiResponse<Bill[]>> {
-        let endpoint = '/bills';
+  if (error) throw error;
+  return data;
+};
 
-        if (params) {
-            const queryParams = new URLSearchParams();
-            if (params.month) queryParams.append('month', params.month.toString());
-            if (params.year) queryParams.append('year', params.year.toString());
-            if (params.status) queryParams.append('status', params.status);
+/**
+ * Get Bills (by month & year)
+ */
+export const getBills = async (month: number, year: number) => {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-            const queryString = queryParams.toString();
-            if (queryString) {
-                endpoint += `?${queryString}`;
-            }
-        }
+  if (!user) throw new Error('User not authenticated');
 
-        return apiService.get<Bill[]>(endpoint);
-    }
+  const { data, error } = await supabase
+    .from('bills')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('month', month)
+    .eq('year', year)
+    .order('due_date', { ascending: true });
 
-    /**
-     * Create new bill
-     */
-    async createBill(data: CreateBillData): Promise<ApiResponse<Bill>> {
-        return apiService.post<Bill>('/bills', data);
-    }
+  if (error) throw error;
+  return data as Bill[];
+};
 
-    /**
-     * Update bill
-     */
-    async updateBill(id: string, data: UpdateBillData): Promise<ApiResponse<Bill>> {
-        return apiService.put<Bill>(`/bills/${id}`, data);
-    }
+/**
+ * Mark Bill as Paid
+ */
+export const markBillAsPaid = async (billId: string) => {
+  const { error } = await supabase
+    .from('bills')
+    .update({ is_paid: true })
+    .eq('id', billId);
 
-    /**
-     * Delete bill
-     */
-    async deleteBill(id: string): Promise<ApiResponse<any>> {
-        return apiService.delete(`/bills/${id}`);
-    }
+  if (error) throw error;
+};
 
-    /**
-     * Mark bill as paid
-     */
-    async markBillPaid(id: string, data?: PayBillData): Promise<ApiResponse<any>> {
-        return apiService.post(`/bills/${id}/pay`, data || {});
-    }
-}
-
-export const billService = new BillService();
+/**
+ * Delete Bill
+ */
+export const deleteBill = async (billId: string) => {
+  const { error } = await supabase.from('bills').delete().eq('id', billId);
+  if (error) throw error;
+};
