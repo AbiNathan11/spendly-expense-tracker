@@ -104,7 +104,8 @@
  * Bill Service – Supabase
  */
 
-import { supabase } from './supabase';
+import { supabase } from "./supabase";
+
 
 export interface Bill {
   id: string;
