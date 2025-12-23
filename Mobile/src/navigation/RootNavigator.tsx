@@ -8,6 +8,8 @@ import { AppTabs } from "./AppTabs";
 import { SplashScreen } from "../screens/SplashScreen";
 import { OnboardingScreen } from "../screens/OnboardingScreen";
 import { AuthScreen } from "../screens/AuthScreen";
+import { ForgotPasswordScreen } from "../screens/ForgotPasswordScreen";
+import { ResetPasswordScreen } from "../screens/ResetPasswordScreen";
 import { EnvelopeDetailScreen } from "../screens/EnvelopeDetailScreen";
 import { UpdateSpendingScreen } from "../screens/UpdateSpendingScreen";
 import { BillDetailScreen } from "../screens/BillDetailScreen";
@@ -30,6 +32,8 @@ export function RootNavigator() {
       <Stack.Screen name="Splash" component={SplashScreen} />
       <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       <Stack.Screen name="Auth" component={AuthScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+      <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
       <Stack.Screen name="AppTabs" component={AppTabs} />
 
       <Stack.Screen name="EnvelopeDetail" component={EnvelopeDetailScreen} />
