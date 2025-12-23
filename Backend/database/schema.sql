@@ -3,10 +3,44 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Users Table
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable Row Level Security (RLS) for users table
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow users to insert their own row
+CREATE POLICY "Allow self insert" ON users
+  FOR INSERT
+  WITH CHECK (auth.uid() = id);
+
+-- Policy: Allow users to select their own row
+CREATE POLICY "Allow self select" ON users
+  FOR SELECT
+  USING (auth.uid() = id);
+
+-- Policy: Allow users to update their own row
+CREATE POLICY "Allow self update" ON users
+  FOR UPDATE
+  USING (auth.uid() = id);
+
+-- Policy: Allow users to delete their own row
+CREATE POLICY "Allow self delete" ON users
+  FOR DELETE
+  USING (auth.uid() = id);
+
 -- User Settings Table
 CREATE TABLE IF NOT EXISTS user_settings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
+  full_name VARCHAR(255),
   daily_budget DECIMAL(10, 2) DEFAULT 1000.00,
   currency VARCHAR(3) DEFAULT 'INR',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
