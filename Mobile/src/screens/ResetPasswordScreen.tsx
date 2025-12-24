@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "../components/Screen";
 import { theme } from "../theme/theme";
 import { authService } from "../services/authService";
+import { API_URL } from "../config/api";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -64,7 +65,7 @@ export function ResetPasswordScreen() {
     setError("");
 
     try {
-      const response = await fetch('http://192.168.1.5:3000/api/auth/update-password', {
+      const response = await fetch(`${API_URL}/auth/update-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,7 +77,7 @@ export function ResetPasswordScreen() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         setSuccess(true);
       } else {

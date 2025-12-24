@@ -26,7 +26,10 @@ export async function scheduleBillReminder(
       body: `${title} ($${amount}) is due tomorrow`,
       sound: "default",
     },
-    trigger: reminderDate,
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: reminderDate,
+    },
   });
 
   return notificationId;

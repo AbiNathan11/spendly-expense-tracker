@@ -9,6 +9,9 @@ export async function scheduleBillReminder(
       title: "💸 Bill Reminder",
       body: `${billName} is due soon`,
     },
-    trigger: remindAt,
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: remindAt,
+    },
   });
 }

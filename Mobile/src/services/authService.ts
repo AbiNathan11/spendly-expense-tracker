@@ -1,4 +1,6 @@
-const API_BASE_URL = 'http://192.168.1.5:3000/api';
+import { API_URL } from '../config/api';
+
+const API_BASE_URL = API_URL;
 
 export interface AuthResponse {
   success: boolean;
@@ -32,7 +34,7 @@ class AuthService {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
+
       const response = await fetch(`${API_BASE_URL}/auth/signup`, {
         method: 'POST',
         headers: {
@@ -69,7 +71,7 @@ class AuthService {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
+
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
@@ -118,7 +120,7 @@ class AuthService {
       };
     }
   }
-  
+
   async updateProfile(email: string, name?: string, currency?: string, dailyBudget?: number): Promise<AuthResponse> {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/profile`, {
@@ -149,7 +151,7 @@ class AuthService {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
+
       const response = await fetch(`${API_BASE_URL}/auth/reset-password-test`, {
         method: 'POST',
         headers: {
