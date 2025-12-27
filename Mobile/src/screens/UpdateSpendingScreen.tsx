@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
   Pressable,
   StyleSheet,
   Switch,
@@ -13,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Screen } from "../components/Screen";
 import { useBudget } from "../state/BudgetStore";
+import { addExpenseRpc } from "../services/expenseRpcService";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "UpdateSpending">;
@@ -26,6 +28,7 @@ const ui = {
   fieldBg: "#FFFFFF",
   fieldPh: "#9CA3AF",
   accent: "#223447",
+  danger: "#EF4444",
 };
 
 export function UpdateSpendingScreen({ route, navigation }: Props) {
@@ -35,18 +38,75 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
 
   const [envelopeId, setEnvelopeId] = useState(defaultEnvelopeId ?? state.envelopes[0]?.id ?? "");
   const [title, setTitle] = useState("");
-  const [amount, setAmount] = useState("0.00");
+  const [amount, setAmount] = useState("");
   const [recurring, setRecurring] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const envelopes = useMemo(() => state.envelopes, [state.envelopes]);
   const selected = envelopes.find((e) => e.id === envelopeId);
+
+  const handleSave = async () => {
+    const amt = Number(amount);
+
+    // Validation
+    if (!envelopeId) {
+      Alert.alert("Select envelope", "Please select an envelope.");
+      return;
+    }
+    if (!title.trim()) {
+      Alert.alert("Add description", "Please add a description.");
+      return;
+    }
+    if (!Number.isFinite(amt) || amt <= 0) {
+      Alert.alert("Invalid amount", "Please enter a valid amount.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // 1. Call Backend RPC
+      const result = await addExpenseRpc({
+        envelope_id: envelopeId,
+        amount: amt,
+        description: title.trim(),
+        date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+        // shop_name: "", // Optional
+        // receipt_url: "" // Optional
+      });
+
+      if (result.success) {
+        // 2. Update Local State (Optimistic or Confirmed)
+        // We update the local store so the UI reflects the change immediately without refetching
+        addTransaction({ envelopeId, title: title.trim(), amount: amt });
+
+        // 3. Handle Overspending Feedback
+        if (result.is_overspent) {
+          Alert.alert(
+            "Expense Added",
+            `Note: This envelope is now overspent.\nNew Balance: ${result.new_balance}`,
+            [{ text: "OK", onPress: () => navigation.goBack() }]
+          );
+        } else {
+          navigation.goBack();
+        }
+      } else {
+        Alert.alert("Error", result.error || "Failed to add expense.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "An unexpected error occurred.");
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <Screen padded={false} style={styles.screen}>
       <View style={styles.page}>
         <View style={styles.header}>
-          <Pressable style={styles.headerBtn} onPress={() => navigation.goBack()}>
+          <Pressable style={styles.headerBtn} onPress={() => navigation.goBack()} disabled={isLoading}>
             <Ionicons name="close" size={22} color={ui.text} />
           </Pressable>
           <Text style={styles.headerTitle}>New Expense</Text>
@@ -59,10 +119,11 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
             <TextInput
               value={amount}
               onChangeText={setAmount}
-              placeholder="$0.00"
+              placeholder="0.00"
               placeholderTextColor={ui.fieldPh}
               keyboardType="numeric"
               style={styles.amountInput}
+              editable={!isLoading}
             />
           </View>
 
@@ -74,13 +135,14 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
               placeholder="What was this for?"
               placeholderTextColor={ui.fieldPh}
               style={styles.textInput}
+              editable={!isLoading}
             />
           </View>
 
           <Text style={styles.label}>Envelope</Text>
           <Pressable
             style={styles.fieldRow}
-            onPress={() => setPickerOpen((v) => !v)}
+            onPress={() => !isLoading && setPickerOpen((v) => !v)}
           >
             <Text style={[styles.selectText, !selected ? styles.selectPlaceholder : null]}>
               {selected ? selected.name : "Select an envelope"}
@@ -121,32 +183,25 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
               <Ionicons name="repeat" size={18} color={ui.text} />
               <Text style={styles.rowTitle}>Recurring Expense</Text>
             </View>
-            <Switch value={recurring} onValueChange={setRecurring} />
+            <Switch
+              value={recurring}
+              onValueChange={setRecurring}
+              disabled={isLoading}
+            />
           </View>
         </View>
 
         <View style={styles.footer}>
           <Pressable
-            style={styles.primaryBtn}
-            onPress={() => {
-              const amt = Number(amount);
-              if (!envelopeId) {
-                Alert.alert("Select envelope", "Please select an envelope.");
-                return;
-              }
-              if (!title.trim()) {
-                Alert.alert("Add description", "Please add a description.");
-                return;
-              }
-              if (!Number.isFinite(amt) || amt <= 0) {
-                Alert.alert("Invalid amount", "Please enter a valid amount.");
-                return;
-              }
-              addTransaction({ envelopeId, title: title.trim(), amount: amt });
-              navigation.goBack();
-            }}
+            style={[styles.primaryBtn, isLoading && styles.primaryBtnDisabled]}
+            onPress={handleSave}
+            disabled={isLoading}
           >
-            <Text style={styles.primaryText}>Log Expense</Text>
+            {isLoading ? (
+              <ActivityIndicator color="#0B1220" />
+            ) : (
+              <Text style={styles.primaryText}>Log Expense</Text>
+            )}
           </Pressable>
         </View>
       </View>
@@ -241,6 +296,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: ui.border,
+    backgroundColor: ui.card,
   },
   pickerText: {
     color: ui.text,
@@ -286,6 +342,9 @@ const styles = StyleSheet.create({
     backgroundColor: ui.accent,
     alignItems: "center",
     justifyContent: "center",
+  },
+  primaryBtnDisabled: {
+    opacity: 0.7,
   },
   primaryText: {
     color: "#0B1220",
