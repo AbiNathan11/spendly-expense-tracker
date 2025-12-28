@@ -72,14 +72,10 @@ type Action =
   | { type: "AUTH/LOADING"; payload: { loading: boolean } }
   | { type: "PROFILE/UPDATE"; payload: { name: string; email: string } }
   | { type: "PROFILE/AVATAR"; payload: { uri: string } }
+  | { type: "TX/SET"; payload: Transaction[] }
   | {
     type: "TX/ADD";
-    payload: {
-      envelopeId: string;
-      title: string;
-      amount: number;
-      dateISO: string;
-    };
+    payload: Transaction;
   }
   | { type: "BILL/SET"; payload: Bill[] }
   | { type: "BILL/ADD"; payload: Bill }
@@ -151,17 +147,11 @@ function reducer(state: State, action: Action): State {
         user: { ...state.user, avatar: action.payload.uri },
       };
 
+    case "TX/SET":
+      return { ...state, transactions: action.payload };
+
     case "TX/ADD": {
-      const tx: Transaction = {
-        id: `t_${Math.random().toString(16).slice(2)}`,
-        ...action.payload,
-      };
-
-      const envelopes = state.envelopes.map((e) =>
-        e.id === action.payload.envelopeId ? { ...e, spent: e.spent + action.payload.amount } : e
-      );
-
-      return { ...state, envelopes, transactions: [tx, ...state.transactions] };
+      return { ...state, transactions: [action.payload, ...state.transactions] };
     }
 
     case "BILL/SET":
@@ -226,6 +216,7 @@ type BudgetContextValue = {
   updateProfile: (name: string, email: string, currency?: string, dailyBudget?: number) => Promise<boolean>;
   updateAvatar: (uri: string) => void;
   addTransaction: (args: { envelopeId: string; title: string; amount: number; dateISO?: string }) => Promise<void>;
+  refreshTransactions: (envelopeId?: string) => Promise<void>;
   markBillPaid: (billId: string, paid: boolean) => Promise<void>;
   addBill: (args: { title: string; amount: number; dueISO: string; envelopeId?: string }) => Promise<void>;
   updateBill: (args: { id: string; title: string; amount: number; dueISO: string; envelopeId?: string }) => Promise<void>;
@@ -234,7 +225,7 @@ type BudgetContextValue = {
   updateEnvelope: (args: { id: string; name: string; budget: number; color: string }) => Promise<void>;
   refreshEnvelopes: () => Promise<void>;
   updateCurrency: (currency: string) => void;
-  updateDailyLimit: (limit: number) => void;
+  updateDailyLimit: (limit: number) => Promise<void>;
   formatCurrency: (amount: number) => string;
 };
 
@@ -281,6 +272,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }
     };
     loadEnvelopes();
+  }, []);
+
+  /* 🔹 LOAD TRANSACTIONS FROM SUPABASE */
+  useEffect(() => {
+    const loadTransactions = async () => {
+      const res = await expenseService.getExpenses();
+      if (res.data) {
+        const mapped: Transaction[] = res.data.map((t) => ({
+          id: t.id,
+          envelopeId: t.envelope_id,
+          title: t.description,
+          amount: t.amount,
+          dateISO: t.date,
+        }));
+        dispatch({ type: "TX/SET", payload: mapped });
+      }
+    };
+    loadTransactions();
   }, []);
 
   const value = useMemo<BudgetContextValue>(
@@ -455,21 +464,38 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             envelope_id: args.envelopeId,
             description: args.title,
             amount: args.amount,
-            date: args.dateISO ?? new Date().toISOString(),
+            date: args.dateISO ? args.dateISO.split('T')[0] : new Date().toISOString().split('T')[0],
           });
 
-          if (res.data) {
-            // Refresh state from DB to get updated balances
+          if (res.success && res.data) {
+            // Refresh state from DB to get updated balances and transactions
             await Promise.all([
               value.refreshEnvelopes(),
-              // If transactions list is needed in state, add refreshTransactions here
+              value.refreshTransactions(),
             ]);
-
-            // Note: We don't dispatch TX/ADD anymore because we refresh everything from source of truth
+          } else {
+            throw new Error(res.error || "Failed to save transaction");
           }
         } catch (error) {
           console.error("addTransaction error:", error);
           throw error;
+        }
+      },
+      refreshTransactions: async (envelopeId?: string) => {
+        try {
+          const res = await expenseService.getExpenses(envelopeId ? { envelope_id: envelopeId } : undefined);
+          if (res.data) {
+            const mapped: Transaction[] = res.data.map((t) => ({
+              id: t.id,
+              envelopeId: t.envelope_id,
+              title: t.description,
+              amount: t.amount,
+              dateISO: t.date,
+            }));
+            dispatch({ type: "TX/SET", payload: mapped });
+          }
+        } catch (error) {
+          console.error("Failed to refresh transactions:", error);
         }
       },
       markBillPaid: async (billId, paid) => {
@@ -633,7 +659,22 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
       },
       updateCurrency: (currency: string) => dispatch({ type: "SETTINGS/CURRENCY", payload: { currency } }),
-      updateDailyLimit: (limit: number) => dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit } }),
+      updateDailyLimit: async (limit: number) => {
+        try {
+          // Persist to backend
+          const res = await authService.updateProfile(state.user.email, state.user.name, state.currency, limit);
+          if (res.success) {
+            dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit } });
+          } else {
+            console.error("Failed to persist daily limit:", res.error);
+            // Even if backend fails, update local state for better UX, or alert user
+            dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit } });
+          }
+        } catch (error) {
+          console.error("Failed to update daily limit:", error);
+          dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit } });
+        }
+      },
       formatCurrency: (amount: number) => formatMoney(amount, state.currency),
     }),
     [state]

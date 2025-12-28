@@ -3,11 +3,14 @@ import {
   Alert,
   Pressable,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
+  Platform,
+  Keyboard,
+  ScrollView,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -29,18 +32,27 @@ const ui = {
 };
 
 export function UpdateSpendingScreen({ route, navigation }: Props) {
-  const { state, addTransaction } = useBudget();
+  const { state, addTransaction, formatCurrency } = useBudget();
 
   const defaultEnvelopeId = route.params && "envelopeId" in route.params ? route.params.envelopeId : undefined;
 
   const [envelopeId, setEnvelopeId] = useState(defaultEnvelopeId ?? state.envelopes[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("0.00");
-  const [recurring, setRecurring] = useState(false);
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const envelopes = useMemo(() => state.envelopes, [state.envelopes]);
   const selected = envelopes.find((e) => e.id === envelopeId);
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    // Android requirement: hide picker immediately
+    setShowDatePicker(Platform.OS === "ios");
+    if (selectedDate) {
+      setDate(selectedDate);
+    }
+  };
 
   return (
     <Screen padded={false} style={styles.screen}>
@@ -53,77 +65,99 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
           <View style={styles.headerBtn} />
         </View>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Amount</Text>
-          <View style={styles.field}>
-            <TextInput
-              value={amount}
-              onChangeText={setAmount}
-              placeholder="$0.00"
-              placeholderTextColor={ui.fieldPh}
-              keyboardType="numeric"
-              style={styles.amountInput}
-            />
-          </View>
-
-          <Text style={styles.label}>Description</Text>
-          <View style={styles.field}>
-            <TextInput
-              value={title}
-              onChangeText={setTitle}
-              placeholder="What was this for?"
-              placeholderTextColor={ui.fieldPh}
-              style={styles.textInput}
-            />
-          </View>
-
-          <Text style={styles.label}>Envelope</Text>
-          <Pressable
-            style={styles.fieldRow}
-            onPress={() => setPickerOpen((v) => !v)}
-          >
-            <Text style={[styles.selectText, !selected ? styles.selectPlaceholder : null]}>
-              {selected ? selected.name : "Select an envelope"}
-            </Text>
-            <Ionicons name={pickerOpen ? "chevron-up" : "chevron-down"} size={18} color={ui.muted} />
-          </Pressable>
-
-          {pickerOpen ? (
-            <View style={styles.pickerList}>
-              {envelopes.map((e) => (
-                <Pressable
-                  key={e.id}
-                  style={styles.pickerItem}
-                  onPress={() => {
-                    setEnvelopeId(e.id);
-                    setPickerOpen(false);
-                  }}
-                >
-                  <Text style={styles.pickerText}>{e.name}</Text>
-                </Pressable>
-              ))}
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.form}>
+            <Text style={styles.label}>Amount</Text>
+            <View style={styles.field}>
+              <TextInput
+                value={amount}
+                onChangeText={setAmount}
+                placeholder="0.00"
+                placeholderTextColor={ui.fieldPh}
+                keyboardType="numeric"
+                style={styles.amountInput}
+              />
             </View>
-          ) : null}
 
-          <View style={styles.rowCard}>
-            <View style={styles.rowLeft}>
-              <Ionicons name="calendar-outline" size={18} color={ui.text} />
-              <Text style={styles.rowTitle}>Date</Text>
+            <Text style={styles.label}>Description</Text>
+            <View style={styles.field}>
+              <TextInput
+                value={title}
+                onChangeText={setTitle}
+                placeholder="What was this for?"
+                placeholderTextColor={ui.fieldPh}
+                style={styles.textInput}
+              />
             </View>
-            <View style={styles.rowRight}>
-              <Text style={styles.rowValue}>Today</Text>
-              <Ionicons name="chevron-forward" size={18} color={ui.muted} />
+
+            <Text style={styles.label}>Envelope</Text>
+            <Pressable
+              style={styles.fieldRow}
+              onPress={() => {
+                Keyboard.dismiss();
+                setPickerOpen((v) => !v);
+              }}
+            >
+              <Text style={[styles.selectText, !selected ? styles.selectPlaceholder : null]}>
+                {selected ? selected.name : "Select an envelope"}
+              </Text>
+              <Ionicons name={pickerOpen ? "chevron-up" : "chevron-down"} size={18} color={ui.muted} />
+            </Pressable>
+
+            {pickerOpen ? (
+              <View style={styles.pickerList}>
+                {envelopes.map((e) => (
+                  <Pressable
+                    key={e.id}
+                    style={styles.pickerItem}
+                    onPress={() => {
+                      setEnvelopeId(e.id);
+                      setPickerOpen(false);
+                    }}
+                  >
+                    <Text style={styles.pickerText}>{e.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+
+            <View style={styles.dateSection}>
+              <Pressable
+                style={styles.dateRow}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setShowDatePicker((v) => !v);
+                }}
+              >
+                <View style={styles.dateIconWrap}>
+                  <Ionicons name="calendar" size={20} color={ui.accent} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.dateLabel}>Date of Expense</Text>
+                  <Text style={styles.dateValue}>
+                    {date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </Text>
+                </View>
+                <Ionicons name={showDatePicker ? "chevron-up" : "chevron-forward"} size={18} color={ui.muted} />
+              </Pressable>
+
+              {showDatePicker && (
+                <View style={[styles.pickerWrapper, { backgroundColor: '#FFFFFF' }]}>
+                  <DateTimePicker
+                    value={date}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                    onChange={onDateChange}
+                    maximumDate={new Date()}
+                    accentColor={ui.accent}
+                    textColor={ui.accent}
+                    themeVariant="light"
+                  />
+                </View>
+              )}
             </View>
           </View>
-
-          <View style={styles.rowCard}>
-            <View style={styles.rowLeft}>
-              <Ionicons name="repeat" size={18} color={ui.text} />
-              <Text style={styles.rowTitle}>Recurring Expense</Text>
-            </View>
-            <Switch value={recurring} onValueChange={setRecurring} />
-          </View>
-        </View>
+        </ScrollView>
 
         <View style={styles.footer}>
           <Pressable
@@ -144,7 +178,12 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
               }
 
               try {
-                await addTransaction({ envelopeId, title: title.trim(), amount: amt });
+                await addTransaction({
+                  envelopeId,
+                  title: title.trim(),
+                  amount: amt,
+                  dateISO: date.toISOString()
+                });
                 navigation.goBack();
               } catch (error) {
                 Alert.alert("Error", "Failed to log expense. Please try again.");
@@ -185,6 +224,9 @@ const styles = StyleSheet.create({
     color: ui.text,
     fontWeight: "900",
     fontSize: 18,
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   form: {
     paddingHorizontal: 18,
@@ -272,17 +314,56 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  rowTitle: {
-    color: ui.text,
-    fontWeight: "800",
+  dateSection: {
+    marginTop: 8,
+    backgroundColor: ui.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: ui.border,
+    overflow: "hidden",
   },
-  rowValue: {
-    color: ui.text,
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  dateIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: ui.bg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dateLabel: {
+    fontSize: 12,
+    color: ui.muted,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  dateValue: {
+    fontSize: 16,
+    color: ui.accent,
     fontWeight: "800",
+    marginTop: 2,
+  },
+  pickerWrapper: {
+    paddingTop: 0,
+    paddingBottom: 4,
+    paddingHorizontal: 0,
+    borderTopWidth: 1,
+    borderTopColor: ui.border,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    transform: [{ scale: 0.92 }], // Slight scale down for a more compact feel
+    marginVertical: -15, // Negative margin to offset the scale footprint
   },
   footer: {
     paddingHorizontal: 18,
-    paddingBottom: 18,
+    paddingBottom: 20,
     marginTop: "auto",
   },
   primaryBtn: {
@@ -293,7 +374,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   primaryText: {
-    color: "#0B1220",
+    color: "#FFFFFF",
     fontWeight: "900",
     fontSize: 16,
   },

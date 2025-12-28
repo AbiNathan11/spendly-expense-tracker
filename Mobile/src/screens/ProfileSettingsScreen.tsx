@@ -15,18 +15,27 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 
 import { Screen } from "../components/Screen";
-import { theme } from "../theme/theme";
 import { useBudget } from "../state/BudgetStore";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-// Expanded currency list
 const currencies = [
   "USD", "EUR", "GBP", "JPY", "CAD",
   "AUD", "CHF", "CNY", "INR", "BRL",
   "ZAR", "MXN", "RUB", "KRW", "SGD"
 ];
+
+const ui = {
+  bg: "#F9FAFB",
+  card: "#FFFFFF",
+  text: "#223447",
+  muted: "#6B7280",
+  border: "#E5E7EB",
+  accent: "#223447",
+  red: "#EF4444",
+  success: "#10B981",
+};
 
 export function ProfileSettingsScreen() {
   const navigation = useNavigation<Nav>();
@@ -39,10 +48,8 @@ export function ProfileSettingsScreen() {
   const [email, setEmail] = useState(state.user.email);
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
 
-  // Sync state when entering edit mode, or saving
   const handleEditToggle = () => {
     if (isEditing) {
-      // Cancelled editing - reset fields
       setName(state.user.name);
       setEmail(state.user.email);
       setCurrencyOpen(false);
@@ -52,16 +59,14 @@ export function ProfileSettingsScreen() {
 
   const handleSaveChanges = async () => {
     const success = await updateProfile(name.trim() || state.user.name, email.trim() || state.user.email, state.currency, state.dailyLimit);
-    
+
     if (success) {
       setIsEditing(false);
       setCurrencyOpen(false);
       setShowSuccessBanner(true);
-      setTimeout(() => {
-        setShowSuccessBanner(false);
-      }, 3000);
+      setTimeout(() => setShowSuccessBanner(false), 3000);
     } else {
-      Alert.alert("Error", "Failed to update profile. Please try again.");
+      Alert.alert("Error", "Failed to update profile.");
     }
   };
 
@@ -81,360 +86,415 @@ export function ProfileSettingsScreen() {
 
   const pickImage = async () => {
     if (!isEditing) return;
-
-    // Request permissions first? usually handled by expo automatically on access
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
     });
-
     if (!result.canceled) {
       updateAvatar(result.assets[0].uri);
     }
   };
 
   return (
-    <Screen>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <TouchableOpacity onPress={isEditing ? handleSaveChanges : () => setIsEditing(true)}>
-            <Text style={styles.headerAction}>{isEditing ? "Save" : "Edit"}</Text>
-          </TouchableOpacity>
-        </View>
+    <Screen padded={false} style={styles.screen}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <Ionicons name="chevron-back" size={24} color={ui.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Profile Settings</Text>
+        <TouchableOpacity
+          style={styles.editBtn}
+          onPress={isEditing ? handleSaveChanges : () => setIsEditing(true)}
+        >
+          <Text style={styles.editBtnText}>{isEditing ? "Save" : "Edit"}</Text>
+        </TouchableOpacity>
+      </View>
 
-        {/* Success Banner */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {showSuccessBanner && (
           <View style={styles.successBanner}>
-            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-            <Text style={styles.successText}>Profile updated successfully</Text>
+            <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+            <Text style={styles.successText}>Changes saved successfully</Text>
           </View>
         )}
 
-        {/* Avatar Section */}
         <View style={styles.avatarSection}>
-          <TouchableOpacity onPress={pickImage} disabled={!isEditing} style={styles.avatarContainer}>
+          <TouchableOpacity
+            onPress={pickImage}
+            disabled={!isEditing}
+            style={[styles.avatarContainer, isEditing && styles.avatarEditing]}
+          >
             {state.user.avatar ? (
               <Image source={{ uri: state.user.avatar }} style={styles.avatarImg} />
             ) : (
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{state.user.name.slice(0, 2).toUpperCase()}</Text>
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarInitial}>{state.user.name.slice(0, 1).toUpperCase()}</Text>
               </View>
             )}
-
             {isEditing && (
-              <View style={styles.editIconContainer}>
-                <Ionicons name="camera" size={16} color="#FFFFFF" />
+              <View style={styles.cameraBadge}>
+                <Ionicons name="camera" size={14} color="#FFFFFF" />
               </View>
             )}
           </TouchableOpacity>
+          <Text style={styles.userName}>{state.user.name}</Text>
+          <Text style={styles.userEmail}>{state.user.email}</Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Personal Information</Text>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Personal Info</Text>
+          </View>
 
-          {/* Name */}
-          <View style={styles.row}>
-            <Text style={styles.label}>Full Name</Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Display Name</Text>
             {isEditing ? (
               <TextInput
-                style={styles.input}
+                style={styles.textInput}
                 value={name}
                 onChangeText={setName}
-                autoCorrect={false}
+                placeholder="Name"
               />
             ) : (
-              <Text style={styles.value}>{state.user.name}</Text>
+              <Text style={styles.readOnlyValue}>{state.user.name}</Text>
             )}
           </View>
+
           <View style={styles.divider} />
 
-          {/* Email */}
-          <View style={styles.row}>
-            <Text style={styles.label}>Email</Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Email Address</Text>
             {isEditing ? (
               <TextInput
-                style={styles.input}
+                style={styles.textInput}
                 value={email}
                 onChangeText={setEmail}
-                autoCapitalize="none"
                 keyboardType="email-address"
+                autoCapitalize="none"
               />
             ) : (
-              <Text style={styles.value}>{state.user.email}</Text>
+              <Text style={styles.readOnlyValue}>{state.user.email}</Text>
             )}
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
-          <Text style={[styles.label, { marginBottom: 12 }]}>Currency</Text>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Preferences</Text>
+          </View>
 
-          {isEditing ? (
-            <View>
-              <TouchableOpacity
-                style={styles.dropdownBtn}
-                onPress={() => setCurrencyOpen(!currencyOpen)}
-              >
-                <Text style={styles.dropdownBtnText}>{state.currency}</Text>
-                <Ionicons name={currencyOpen ? "chevron-up" : "chevron-down"} size={20} color={theme.colors.text} />
-              </TouchableOpacity>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>App Currency</Text>
+            {isEditing ? (
+              <View>
+                <TouchableOpacity
+                  style={styles.currencySelector}
+                  onPress={() => setCurrencyOpen(!currencyOpen)}
+                >
+                  <Text style={styles.selectedCurrency}>{state.currency}</Text>
+                  <Ionicons name={currencyOpen ? "chevron-up" : "chevron-down"} size={18} color={ui.muted} />
+                </TouchableOpacity>
 
-              {currencyOpen && (
-                <View style={styles.dropdownList}>
-                  {currencies.map(curr => (
-                    <TouchableOpacity
-                      key={curr}
-                      style={[
-                        styles.dropdownItem,
-                        state.currency === curr && styles.dropdownItemActive
-                      ]}
-                      onPress={() => {
-                        updateCurrency(curr);
-                        setCurrencyOpen(false);
-                      }}
-                    >
-                      <Text style={[
-                        styles.dropdownItemText,
-                        state.currency === curr && styles.dropdownItemTextActive
-                      ]}>{curr}</Text>
-
-                      {state.currency === curr && (
-                        <Ionicons name="checkmark" size={16} color={theme.colors.primary} />
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-          ) : (
-            <View style={styles.currencyRowReadOnly}>
+                {currencyOpen && (
+                  <View style={styles.currencyGrid}>
+                    {currencies.map(curr => (
+                      <TouchableOpacity
+                        key={curr}
+                        style={[
+                          styles.currencyItem,
+                          state.currency === curr && styles.currencyItemActive
+                        ]}
+                        onPress={() => {
+                          updateCurrency(curr);
+                          setCurrencyOpen(false);
+                        }}
+                      >
+                        <Text style={[
+                          styles.currencyText,
+                          state.currency === curr && styles.currencyTextActive
+                        ]}>{curr}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ) : (
               <View style={styles.currencyBadge}>
                 <Text style={styles.currencyBadgeText}>{state.currency}</Text>
               </View>
-            </View>
-          )}
+            )}
+          </View>
         </View>
 
-        <View style={{ height: 20 }} />
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <Ionicons name="log-out" size={20} color={ui.red} />
+          <Text style={styles.logoutText}>Sign Out</Text>
+        </TouchableOpacity>
 
-        {/* Logout Button */}
-        {!isEditing && (
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-            <Text style={styles.logoutText}>Log Out</Text>
-          </TouchableOpacity>
-        )}
-
-        <View style={{ height: 60 }} />
+        <Text style={styles.versionInfo}>Spendly v1.0.4 • Made with ❤️</Text>
+        <View style={{ height: 40 }} />
       </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F9FAFB",
+  screen: {
+    backgroundColor: ui.bg,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 10,
+    paddingBottom: 15,
   },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
+  headerBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: ui.card,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: ui.border,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
-    color: theme.colors.text,
+    color: ui.text,
   },
-  headerAction: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: theme.colors.primary,
-    padding: 8,
-    marginRight: -8,
+  editBtn: {
+    backgroundColor: ui.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  editBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
   },
   successBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.success,
-    marginHorizontal: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    backgroundColor: ui.success,
+    padding: 12,
+    borderRadius: 16,
     marginBottom: 20,
+    gap: 8,
   },
   successText: {
     color: "#FFFFFF",
+    fontWeight: "700",
     fontSize: 14,
-    fontWeight: "600",
-    marginLeft: 8,
   },
   avatarSection: {
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 30,
   },
   avatarContainer: {
-    position: "relative",
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: ui.card,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: ui.border,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  avatar: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: theme.colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
+  avatarEditing: {
+    borderColor: ui.accent,
+    borderWidth: 2,
   },
   avatarImg: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: "100%",
+    height: "100%",
+    borderRadius: 50,
   },
-  avatarText: {
+  avatarPlaceholder: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 50,
+    backgroundColor: ui.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarInitial: {
+    fontSize: 40,
     color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "700",
+    fontWeight: "900",
   },
-  editIconContainer: {
+  cameraBadge: {
     position: "absolute",
     bottom: 0,
     right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#1F2937",
-    justifyContent: "center",
+    backgroundColor: ui.accent,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: ui.bg,
   },
-  section: {
-    backgroundColor: "#FFFFFF",
+  userName: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: ui.text,
+  },
+  userEmail: {
+    fontSize: 14,
+    color: ui.muted,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  card: {
+    backgroundColor: ui.card,
+    borderRadius: 24,
     padding: 20,
     marginBottom: 20,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderColor: ui.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 15,
+    elevation: 2,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#9CA3AF",
+  cardHeader: {
+    marginBottom: 18,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: ui.text,
+  },
+  inputGroup: {
+    marginBottom: 10,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: ui.muted,
     textTransform: "uppercase",
-    marginBottom: 16,
     letterSpacing: 0.5,
+    marginBottom: 8,
   },
-  row: {
-    flexDirection: "column",
-    gap: 6,
-    marginBottom: 16,
+  textInput: {
+    backgroundColor: ui.bg,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: "700",
+    color: ui.text,
+    borderWidth: 1,
+    borderColor: ui.border,
+  },
+  readOnlyValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: ui.text,
+    paddingVertical: 4,
   },
   divider: {
     height: 1,
-    backgroundColor: "#F3F4F6",
-    marginBottom: 16,
+    backgroundColor: ui.border,
+    marginVertical: 15,
+    opacity: 0.5,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6B7280",
-  },
-  value: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: theme.colors.text,
-  },
-  input: {
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: theme.colors.text,
-  },
-  dropdownBtn: {
+  currencySelector: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: ui.bg,
+    borderRadius: 12,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-  },
-  dropdownBtnText: {
-    fontSize: 16,
-    color: theme.colors.text,
-    fontWeight: "600",
-  },
-  dropdownList: {
-    marginTop: 8,
-    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 8,
-    padding: 4,
+    borderColor: ui.border,
   },
-  dropdownItem: {
+  selectedCurrency: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: ui.text,
+  },
+  currencyGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+  currencyItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: ui.bg,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: ui.border,
+    minWidth: 55,
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 6,
   },
-  dropdownItemActive: {
-    backgroundColor: "#EFF6FF",
+  currencyItemActive: {
+    backgroundColor: ui.accent,
+    borderColor: ui.accent,
   },
-  dropdownItemText: {
-    fontSize: 16,
-    color: "#4B5563",
+  currencyText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: ui.text,
   },
-  dropdownItemTextActive: {
-    color: theme.colors.primary,
-    fontWeight: "600",
-  },
-  currencyRowReadOnly: {
-    flexDirection: "row",
+  currencyTextActive: {
+    color: "#FFFFFF",
   },
   currencyBadge: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
+    backgroundColor: ui.bg,
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: ui.border,
   },
   currencyBadgeText: {
-    color: theme.colors.text,
-    fontWeight: "500",
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: "800",
+    color: ui.accent,
   },
-  logoutButton: {
+  logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 16,
-    gap: 8,
     backgroundColor: "#FEF2F2",
-    marginHorizontal: 20,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 20,
+    gap: 10,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
   },
   logoutText: {
-    color: "#EF4444",
+    color: ui.red,
+    fontWeight: "900",
     fontSize: 16,
+  },
+  versionInfo: {
+    textAlign: "center",
+    color: ui.muted,
+    fontSize: 12,
     fontWeight: "700",
+    marginTop: 30,
+    opacity: 0.7,
   },
 });

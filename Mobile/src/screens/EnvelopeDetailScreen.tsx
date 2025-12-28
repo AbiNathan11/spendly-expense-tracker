@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -43,7 +44,25 @@ function txEmoji(title: string) {
 }
 
 export function EnvelopeDetailScreen({ route, navigation }: Props) {
-  const { state } = useBudget();
+  const { state, refreshEnvelopes, refreshTransactions } = useBudget();
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshEnvelopes();
+      refreshTransactions(route.params.envelopeId);
+    }, [route.params.envelopeId])
+  );
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      refreshEnvelopes(),
+      refreshTransactions(route.params.envelopeId)
+    ]);
+    setRefreshing(false);
+  }, [route.params.envelopeId]);
+
   const envelope = state.envelopes.find((e) => e.id === route.params.envelopeId);
 
   const transactions = useMemo(
@@ -68,7 +87,13 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
   return (
     <Screen padded={false} style={styles.screen}>
       <View style={styles.page}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           <View style={styles.header}>
             <Pressable style={styles.headerBtn} onPress={() => navigation.goBack()}>
               <Ionicons name="chevron-back" size={24} color={ui.text} />
@@ -140,7 +165,7 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
                     <Text style={styles.txMeta}>{formatDateShort(t.dateISO)}</Text>
                   </View>
                 </View>
-                <Text style={styles.txAmount}>{`-${formatMoney(t.amount)}`}</Text>
+                <Text style={styles.txAmount}>{formatMoney(t.amount)}</Text>
               </View>
             ))}
           </View>
