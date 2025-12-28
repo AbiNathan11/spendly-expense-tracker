@@ -64,22 +64,27 @@ class BillService {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) throw new Error('User not authenticated');
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const billToInsert = {
+        ...bill,
+        user_id: user.id,
+        is_paid: false,
+        is_recurring: bill.is_recurring ?? false,
+      };
 
       const { data, error } = await supabase
         .from('bills')
-        .insert([
-          {
-            ...bill,
-            user_id: user.id,
-            is_paid: false,
-            is_recurring: bill.is_recurring ?? false,
-          },
-        ])
+        .insert([billToInsert])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
+
       return { data: data as Bill, error: null };
     } catch (error) {
       return { data: null, error };

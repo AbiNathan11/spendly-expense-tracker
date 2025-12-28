@@ -44,7 +44,7 @@ const createEnvelope = async (req, res) => {
                     name,
                     icon,
                     allocated_amount: parseFloat(allocated_amount),
-                    current_balance: parseFloat(allocated_amount),
+                    current_balance: parseFloat(allocated_amount), // Force initial balance to equal budget (0 spent)
                     month: parseInt(month),
                     year: parseInt(year)
                 }
@@ -76,11 +76,31 @@ const updateEnvelope = async (req, res) => {
         const { id } = req.params;
         const { name, icon, allocated_amount } = req.body;
 
+        // Fetch old envelope to calculate balance difference
+        const { data: oldEnvelope, error: fetchError } = await supabase
+            .from('envelopes')
+            .select('*')
+            .eq('id', id)
+            .eq('user_id', userId)
+            .single();
+
+        if (fetchError || !oldEnvelope) {
+            return res.status(404).json({
+                success: false,
+                error: 'Envelope not found'
+            });
+        }
+
         const updateData = {};
         if (name) updateData.name = name;
         if (icon) updateData.icon = icon;
+
         if (allocated_amount !== undefined) {
-            updateData.allocated_amount = parseFloat(allocated_amount);
+            const newAllocated = parseFloat(allocated_amount);
+            const diff = newAllocated - oldEnvelope.allocated_amount;
+            updateData.allocated_amount = newAllocated;
+            // Adjust current balance by the same amount the budget changed
+            updateData.current_balance = oldEnvelope.current_balance + diff;
         }
 
         const { data, error } = await supabase
@@ -92,13 +112,6 @@ const updateEnvelope = async (req, res) => {
             .single();
 
         if (error) throw error;
-
-        if (!data) {
-            return res.status(404).json({
-                success: false,
-                error: 'Envelope not found'
-            });
-        }
 
         return res.status(200).json({
             success: true,

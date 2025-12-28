@@ -62,7 +62,7 @@ export function AddEnvelopeScreen({ navigation, route }: Props) {
         }
     }, [editId, state.envelopes]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const amt = Number(budget);
 
         if (!name.trim()) {
@@ -74,22 +74,25 @@ export function AddEnvelopeScreen({ navigation, route }: Props) {
             return;
         }
 
-        if (isEditing && editId) {
-            updateEnvelope({
-                id: editId,
-                name: name.trim(),
-                budget: amt,
-                color: selectedColor,
-            });
-        } else {
-            addEnvelope({
-                name: name.trim(),
-                budget: amt,
-                color: selectedColor,
-            });
+        try {
+            if (isEditing && editId) {
+                await updateEnvelope({
+                    id: editId,
+                    name: name.trim(),
+                    budget: amt,
+                    color: selectedColor,
+                });
+            } else {
+                await addEnvelope({
+                    name: name.trim(),
+                    budget: amt,
+                    color: selectedColor,
+                });
+            }
+            navigation.goBack();
+        } catch (error) {
+            Alert.alert("Error", "Failed to save envelope. Please try again.");
         }
-
-        navigation.goBack();
     };
 
     return (

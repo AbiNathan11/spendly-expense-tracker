@@ -1,6 +1,6 @@
 import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -34,12 +34,31 @@ function envelopeEmoji(id: string) {
 
 export function EnvelopesScreen() {
   const navigation = useNavigation<Nav>();
-  const { state, formatCurrency } = useBudget();
+  const { state, formatCurrency, refreshEnvelopes } = useBudget();
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshEnvelopes();
+    }, [])
+  );
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await refreshEnvelopes();
+    setRefreshing(false);
+  }, []);
 
   return (
     <Screen padded={false} style={styles.screen}>
       <View style={styles.page}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           <View style={styles.header}>
             <View style={{ width: 40 }} />
             <Text style={styles.headerTitle}>My Envelopes</Text>
@@ -64,8 +83,8 @@ export function EnvelopesScreen() {
                   onPress={() => navigation.navigate("EnvelopeDetail", { envelopeId: e.id })}
                 >
                   <View style={styles.cardTop}>
-                    <View style={styles.avatarWrap}>
-                      <Text style={styles.avatarEmoji}>{envelopeEmoji(e.id)}</Text>
+                    <View style={[styles.avatarWrap, { backgroundColor: e.color + '20' }]}>
+                      <Text style={[styles.avatarEmoji, { color: e.color }]}>{e.name.substring(0, 1).toUpperCase()}</Text>
                     </View>
 
                     <View style={styles.cardMid}>
@@ -101,22 +120,24 @@ export function EnvelopesScreen() {
             })}
           </View>
 
-          <View style={styles.createBox}>
-            <View style={styles.createIcon}>
-              <Ionicons name="card-outline" size={26} color={ui.fab} />
-              <View style={styles.createIconPlus}>
-                <Ionicons name="add" size={14} color={ui.fab} />
+          {state.envelopes.length === 0 && (
+            <View style={styles.createBox}>
+              <View style={styles.createIcon}>
+                <Ionicons name="card-outline" size={26} color={ui.fab} />
+                <View style={styles.createIconPlus}>
+                  <Ionicons name="add" size={14} color={ui.fab} />
+                </View>
               </View>
+              <Text style={styles.createTitle}>Create your first envelope</Text>
+              <Text style={styles.createBody}>
+                Start budgeting by adding a new category to{"\n"}track your spending.
+              </Text>
+              <Pressable style={styles.createBtn} onPress={() => navigation.navigate("AddEnvelope")}>
+                <Ionicons name="add" size={16} color="#FFFFFF" />
+                <Text style={styles.createBtnText}>Add Envelope</Text>
+              </Pressable>
             </View>
-            <Text style={styles.createTitle}>Create your first envelope</Text>
-            <Text style={styles.createBody}>
-              Start budgeting by adding a new category to{"\n"}track your spending.
-            </Text>
-            <Pressable style={styles.createBtn} onPress={() => navigation.navigate("AddEnvelope")}>
-              <Ionicons name="add" size={16} color="#FFFFFF" />
-              <Text style={styles.createBtnText}>Add Envelope</Text>
-            </Pressable>
-          </View>
+          )}
         </ScrollView>
       </View>
     </Screen>

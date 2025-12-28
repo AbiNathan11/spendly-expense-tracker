@@ -128,7 +128,7 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
         <View style={styles.footer}>
           <Pressable
             style={styles.primaryBtn}
-            onPress={() => {
+            onPress={async () => {
               const amt = Number(amount);
               if (!envelopeId) {
                 Alert.alert("Select envelope", "Please select an envelope.");
@@ -142,8 +142,13 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
                 Alert.alert("Invalid amount", "Please enter a valid amount.");
                 return;
               }
-              addTransaction({ envelopeId, title: title.trim(), amount: amt });
-              navigation.goBack();
+
+              try {
+                await addTransaction({ envelopeId, title: title.trim(), amount: amt });
+                navigation.goBack();
+              } catch (error) {
+                Alert.alert("Error", "Failed to log expense. Please try again.");
+              }
             }}
           >
             <Text style={styles.primaryText}>Log Expense</Text>

@@ -1,12 +1,13 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Screen } from "../components/Screen";
 import { useBudget } from "../state/BudgetStore";
 import { formatMoney } from "../utils/format";
+import { billService } from "../services/billService";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -69,12 +70,19 @@ function formatShortMonthDay(d: Date) {
 
 export function BillsScreen() {
   const navigation = useNavigation<Nav>();
-  const { state, markBillPaid } = useBudget();
+  const { state, markBillPaid, refreshBills } = useBudget();
 
   const today = useMemo(() => toDateOnly(new Date()), []);
   const [cursor, setCursor] = useState(() => ({ year: today.getFullYear(), month: today.getMonth() }));
   const [selected, setSelected] = useState<Date>(today);
   const [filter, setFilter] = useState<"all" | "due" | "paid">("all");
+
+  // Refresh bills when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshBills();
+    }, [refreshBills])
+  );
 
   const billsInMonth = useMemo(() => {
     return state.bills

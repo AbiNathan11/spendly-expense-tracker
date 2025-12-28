@@ -11,7 +11,7 @@ import { Platform } from 'react-native';
 const getApiUrl = () => {
     if (__DEV__) {
         // Find your IP: Windows -> ipconfig, Mac -> ifconfig
-        return 'http://192.168.1.9:3000/api';
+        return 'http://192.168.1.5:3000/api';
     } else {
         // Production mode - replace with your deployed backend URL
         return 'https://your-backend-url.com/api';

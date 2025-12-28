@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, Modal, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { Pressable, ScrollView, StyleSheet, Text, View, Modal, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, RefreshControl } from "react-native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -28,10 +28,25 @@ const ui = {
 
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
-  const { state, updateDailyLimit, formatCurrency } = useBudget();
+  const { state, updateDailyLimit, formatCurrency, refreshEnvelopes, refreshBills } = useBudget();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [limitInput, setLimitInput] = useState("");
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  // Auto-refresh when screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshEnvelopes();
+      refreshBills();
+    }, [])
+  );
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([refreshEnvelopes(), refreshBills()]);
+    setRefreshing(false);
+  }, []);
 
   const today = useMemo(() => {
     const dailyLimit = state.dailyLimit;
@@ -108,7 +123,13 @@ export function HomeScreen() {
   return (
     <Screen padded={false} style={styles.screen}>
       <View style={styles.page}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           {/* Header */}
           <View style={styles.header}>
             <Pressable

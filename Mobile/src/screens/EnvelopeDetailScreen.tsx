@@ -84,8 +84,8 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
 
           <View style={styles.summaryCard}>
             <View style={styles.summaryTop}>
-              <View style={styles.avatarWrap}>
-                <Text style={styles.avatarEmoji}>{envelopeEmoji(envelope.id)}</Text>
+              <View style={[styles.avatarWrap, { backgroundColor: envelope.color + '20' }]}>
+                <Text style={[styles.avatarEmoji, { color: envelope.color }]}>{envelope.name.substring(0, 1).toUpperCase()}</Text>
               </View>
               <Text style={styles.bigTitle}>{envelope.name}</Text>
             </View>

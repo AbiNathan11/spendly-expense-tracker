@@ -9,8 +9,11 @@ import * as Notifications from "expo-notifications";
 
 import { formatMoney } from "../utils/format";
 import { billService } from "../services/billService";
+import { envelopeService } from "../services/envelopeService";
+import { expenseService } from "../services/expenseService";
 import { scheduleBillReminder, cancelBillReminder } from "../utils/billReminder";
 import { authService, type AuthResponse } from "../services/authService";
+import { supabase } from "../config/supabase";
 
 /* ===================== TYPES ===================== */
 
@@ -83,12 +86,16 @@ type Action =
   | { type: "BILL/UPDATE"; payload: Bill }
   | { type: "BILL/MARK_PAID"; payload: { billId: string; paid: boolean } }
   | {
+    type: "ENVELOPE/SET";
+    payload: Envelope[];
+  }
+  | {
     type: "ENVELOPE/ADD";
-    payload: { name: string; budget: number; color: string };
+    payload: Envelope;
   }
   | {
     type: "ENVELOPE/UPDATE";
-    payload: { id: string; name: string; budget: number; color: string };
+    payload: Envelope;
   }
   | { type: "SETTINGS/CURRENCY"; payload: { currency: string } }
   | { type: "SETTINGS/DAILY_LIMIT"; payload: { limit: number } };
@@ -102,11 +109,7 @@ const initialState: State = {
   authLoading: false,
   authError: null,
   user: { name: "Alex", email: "alex@example.com", avatar: undefined },
-  envelopes: [
-    { id: "groceries", name: "Groceries", budget: 400, spent: 0, color: "#9ED9C4" },
-    { id: "transport", name: "Transport", budget: 100, spent: 0, color: "#F6D57A" },
-    { id: "entertainment", name: "Entertainment", budget: 200, spent: 0, color: "#F87171" },
-  ],
+  envelopes: [],
   transactions: [],
   bills: [],
   goals: [],
@@ -185,27 +188,20 @@ function reducer(state: State, action: Action): State {
         ),
       };
 
-    case "ENVELOPE/ADD": {
-      const envelope: Envelope = {
-        id: `e_${Math.random().toString(16).slice(2)}`,
-        name: action.payload.name,
-        budget: action.payload.budget,
-        spent: 0,
-        color: action.payload.color,
-      };
+    case "ENVELOPE/SET":
+      return { ...state, envelopes: action.payload };
+
+    case "ENVELOPE/ADD":
       return {
         ...state,
-        envelopes: [...state.envelopes, envelope],
+        envelopes: [...state.envelopes, action.payload],
       };
-    }
 
     case "ENVELOPE/UPDATE":
       return {
         ...state,
         envelopes: state.envelopes.map((e) =>
-          e.id === action.payload.id
-            ? { ...e, name: action.payload.name, budget: action.payload.budget, color: action.payload.color }
-            : e
+          e.id === action.payload.id ? action.payload : e
         ),
       };
 
@@ -229,12 +225,14 @@ type BudgetContextValue = {
   logout: () => void;
   updateProfile: (name: string, email: string, currency?: string, dailyBudget?: number) => Promise<boolean>;
   updateAvatar: (uri: string) => void;
-  addTransaction: (args: { envelopeId: string; title: string; amount: number; dateISO?: string }) => void;
+  addTransaction: (args: { envelopeId: string; title: string; amount: number; dateISO?: string }) => Promise<void>;
   markBillPaid: (billId: string, paid: boolean) => Promise<void>;
   addBill: (args: { title: string; amount: number; dueISO: string; envelopeId?: string }) => Promise<void>;
   updateBill: (args: { id: string; title: string; amount: number; dueISO: string; envelopeId?: string }) => Promise<void>;
-  addEnvelope: (args: { name: string; budget: number; color: string }) => void;
-  updateEnvelope: (args: { id: string; name: string; budget: number; color: string }) => void;
+  refreshBills: () => Promise<void>;
+  addEnvelope: (args: { name: string; budget: number; color: string }) => Promise<void>;
+  updateEnvelope: (args: { id: string; name: string; budget: number; color: string }) => Promise<void>;
+  refreshEnvelopes: () => Promise<void>;
   updateCurrency: (currency: string) => void;
   updateDailyLimit: (limit: number) => void;
   formatCurrency: (amount: number) => string;
@@ -266,6 +264,25 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     loadBills();
   }, []);
 
+  /* 🔹 LOAD ENVELOPES FROM SUPABASE */
+  useEffect(() => {
+    const loadEnvelopes = async () => {
+      const date = new Date();
+      const res = await envelopeService.getEnvelopeStats(date.getMonth() + 1, date.getFullYear());
+      if (res.data) {
+        const mapped: Envelope[] = res.data.map((e) => ({
+          id: e.id,
+          name: e.name,
+          budget: e.allocated_amount,
+          spent: e.spent,
+          color: e.icon, // We use icon field for color hex
+        }));
+        dispatch({ type: "ENVELOPE/SET", payload: mapped });
+      }
+    };
+    loadEnvelopes();
+  }, []);
+
   const value = useMemo<BudgetContextValue>(
     () => ({
       state,
@@ -273,9 +290,31 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: "AUTH/LOADING", payload: { loading: true } });
 
         try {
+          console.log("=== Starting login process ===");
+          console.log("Email:", email);
+
           const loginResponse = await authService.login({ email, password });
+          console.log("Backend login response:", loginResponse);
 
           if (loginResponse.success) {
+            console.log("Backend login successful, setting Supabase session");
+
+            // Set Supabase session using the tokens from backend
+            if (loginResponse.session?.access_token && loginResponse.session?.refresh_token) {
+              const { error: sessionError } = await supabase.auth.setSession({
+                access_token: loginResponse.session.access_token,
+                refresh_token: loginResponse.session.refresh_token,
+              });
+
+              if (sessionError) {
+                console.error("Failed to set Supabase session:", sessionError);
+                dispatch({ type: "AUTH/ERROR", payload: { error: `Session error: ${sessionError.message}` } });
+                return false;
+              }
+
+              console.log("Supabase session set successfully");
+            }
+
             const userName = loginResponse.user?.name || name || email.split('@')[0];
 
             dispatch({
@@ -286,12 +325,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                 token: loginResponse.session?.access_token
               }
             });
+
+            console.log("Login process completed successfully");
             return true;
           } else {
+            console.error("Backend login failed:", loginResponse.error);
             dispatch({ type: "AUTH/ERROR", payload: { error: loginResponse.error || "Login failed" } });
             return false;
           }
         } catch (error) {
+          console.error("Login error:", error);
           dispatch({ type: "AUTH/ERROR", payload: { error: error instanceof Error ? error.message : "Authentication failed" } });
           return false;
         }
@@ -300,12 +343,52 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: "AUTH/LOADING", payload: { loading: true } });
 
         try {
+          console.log("=== Starting signup process ===");
+          console.log("Email:", email);
+
           const signupResponse = await authService.signup({ email, password, name });
+          console.log("Backend signup response:", signupResponse);
 
           if (signupResponse.success) {
+            console.log("Backend signup successful, setting Supabase session");
+
+            // Set Supabase session using the tokens from backend
+            if (signupResponse.session?.access_token && signupResponse.session?.refresh_token) {
+              const { error: sessionError } = await supabase.auth.setSession({
+                access_token: signupResponse.session.access_token,
+                refresh_token: signupResponse.session.refresh_token,
+              });
+
+              if (sessionError) {
+                console.error("Failed to set Supabase session:", sessionError);
+                dispatch({ type: "AUTH/ERROR", payload: { error: `Session error: ${sessionError.message}` } });
+                return false;
+              }
+
+              console.log("Supabase session set successfully");
+            }
+
+            // Auto-login after signup
             const loginAfterSignup = await authService.login({ email, password });
+            console.log("Auto-login after signup response:", loginAfterSignup);
 
             if (loginAfterSignup.success) {
+              // Set Supabase session for auto-login
+              if (loginAfterSignup.session?.access_token && loginAfterSignup.session?.refresh_token) {
+                const { error: sessionError } = await supabase.auth.setSession({
+                  access_token: loginAfterSignup.session.access_token,
+                  refresh_token: loginAfterSignup.session.refresh_token,
+                });
+
+                if (sessionError) {
+                  console.error("Failed to set Supabase session for auto-login:", sessionError);
+                  dispatch({ type: "AUTH/ERROR", payload: { error: `Session error: ${sessionError.message}` } });
+                  return false;
+                }
+
+                console.log("Supabase session set for auto-login");
+              }
+
               dispatch({
                 type: "AUTH/LOGIN",
                 payload: {
@@ -314,16 +397,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                   token: loginAfterSignup.session?.access_token
                 }
               });
+
+              console.log("Signup and auto-login process completed successfully");
               return true;
             } else {
+              console.error("Auto-login after signup failed:", loginAfterSignup.error);
               dispatch({ type: "AUTH/ERROR", payload: { error: loginAfterSignup.error || "Login failed after signup" } });
               return false;
             }
           } else {
+            console.error("Backend signup failed:", signupResponse.error);
             dispatch({ type: "AUTH/ERROR", payload: { error: signupResponse.error || "Signup failed" } });
             return false;
           }
         } catch (error) {
+          console.error("Signup error:", error);
           dispatch({ type: "AUTH/ERROR", payload: { error: error instanceof Error ? error.message : "Signup failed" } });
           return false;
         }
@@ -361,16 +449,29 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
       },
       updateAvatar: (uri: string) => dispatch({ type: "PROFILE/AVATAR", payload: { uri } }),
-      addTransaction: (args: { envelopeId: string; title: string; amount: number; dateISO?: string }) =>
-        dispatch({
-          type: "TX/ADD",
-          payload: {
-            envelopeId: args.envelopeId,
-            title: args.title,
+      addTransaction: async (args: { envelopeId: string; title: string; amount: number; dateISO?: string }) => {
+        try {
+          const res = await expenseService.createExpense({
+            envelope_id: args.envelopeId,
+            description: args.title,
             amount: args.amount,
-            dateISO: args.dateISO ?? new Date().toISOString(),
-          },
-        }),
+            date: args.dateISO ?? new Date().toISOString(),
+          });
+
+          if (res.data) {
+            // Refresh state from DB to get updated balances
+            await Promise.all([
+              value.refreshEnvelopes(),
+              // If transactions list is needed in state, add refreshTransactions here
+            ]);
+
+            // Note: We don't dispatch TX/ADD anymore because we refresh everything from source of truth
+          }
+        } catch (error) {
+          console.error("addTransaction error:", error);
+          throw error;
+        }
+      },
       markBillPaid: async (billId, paid) => {
         const bill = state.bills.find((b) => b.id === billId);
 
@@ -386,27 +487,38 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         });
       },
       addBill: async (args) => {
-        const res = await billService.createBill({
+        // Helper function to parse YYYY-MM-DD without timezone issues
+        const parseLocalDate = (dateString: string) => {
+          const [year, month, day] = dateString.split('-').map(Number);
+          return new Date(year, month - 1, day); // month is 0-indexed
+        };
+
+        const parsedDate = parseLocalDate(args.dueISO);
+
+        const billData = {
           name: args.title,
           amount: args.amount,
           due_date: args.dueISO,
           category: args.envelopeId ?? "general",
-          month: new Date(args.dueISO).getMonth() + 1,
-          year: new Date(args.dueISO).getFullYear(),
-        });
+          month: parsedDate.getMonth() + 1,
+          year: parsedDate.getFullYear(),
+        };
 
-        if (!res.data) return;
+        try {
+          const res = await billService.createBill(billData);
 
-        const reminderId = await scheduleBillReminder(
-          res.data.id,
-          res.data.name,
-          res.data.amount,
-          res.data.due_date
-        );
+          if (!res.data) {
+            throw new Error(res.error ? String(res.error) : "Failed to create bill");
+          }
 
-        dispatch({
-          type: "BILL/ADD",
-          payload: {
+          const reminderId = await scheduleBillReminder(
+            res.data.id,
+            res.data.name,
+            res.data.amount,
+            res.data.due_date
+          );
+
+          const newBill = {
             id: res.data.id,
             title: res.data.name,
             amount: res.data.amount,
@@ -414,8 +526,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             paid: res.data.is_paid,
             envelopeId: res.data.category,
             reminderId,
-          },
-        });
+          };
+
+          dispatch({
+            type: "BILL/ADD",
+            payload: newBill,
+          });
+        } catch (error) {
+          console.error("addBill error:", error);
+          throw error;
+        }
       },
       updateBill: async (args) => {
         const res = await billService.updateBill(args.id, {
@@ -439,10 +559,79 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           });
         }
       },
-      addEnvelope: (args: { name: string; budget: number; color: string }) =>
-        dispatch({ type: "ENVELOPE/ADD", payload: args }),
-      updateEnvelope: (args: { id: string; name: string; budget: number; color: string }) =>
-        dispatch({ type: "ENVELOPE/UPDATE", payload: args }),
+      refreshBills: async () => {
+        try {
+          const res = await billService.getBills();
+          if (res.data) {
+            const mapped: Bill[] = res.data.map((b) => ({
+              id: b.id,
+              title: b.name,
+              amount: b.amount,
+              dueISO: b.due_date,
+              paid: b.is_paid,
+              envelopeId: b.category,
+            }));
+            dispatch({ type: "BILL/SET", payload: mapped });
+          }
+        } catch (error) {
+          console.error("Failed to refresh bills:", error);
+        }
+      },
+      refreshEnvelopes: async () => {
+        try {
+          const date = new Date();
+          const res = await envelopeService.getEnvelopeStats(date.getMonth() + 1, date.getFullYear());
+          if (res.data) {
+            const mapped: Envelope[] = res.data.map((e) => ({
+              id: e.id,
+              name: e.name,
+              budget: e.allocated_amount,
+              spent: e.spent,
+              color: e.icon,
+            }));
+            dispatch({ type: "ENVELOPE/SET", payload: mapped });
+          }
+        } catch (error) {
+          console.error("Failed to refresh envelopes:", error);
+        }
+      },
+      addEnvelope: async (args: { name: string; budget: number; color: string }) => {
+        const date = new Date();
+        try {
+          const res = await envelopeService.createEnvelope({
+            name: args.name,
+            allocated_amount: args.budget,
+            icon: args.color,
+            month: date.getMonth() + 1,
+            year: date.getFullYear(),
+          });
+
+          if (res.data) {
+            // Fetch updated list from database to get calculated fields like 'spent'
+            await value.refreshEnvelopes();
+          }
+        } catch (error) {
+          console.error("addEnvelope error:", error);
+          throw error;
+        }
+      },
+      updateEnvelope: async (args: { id: string; name: string; budget: number; color: string }) => {
+        try {
+          const res = await envelopeService.updateEnvelope(args.id, {
+            name: args.name,
+            allocated_amount: args.budget,
+            icon: args.color,
+          });
+
+          if (res.data) {
+            // Fetch updated list from database to get calculated fields like 'spent'
+            await value.refreshEnvelopes();
+          }
+        } catch (error) {
+          console.error("updateEnvelope error:", error);
+          throw error;
+        }
+      },
       updateCurrency: (currency: string) => dispatch({ type: "SETTINGS/CURRENCY", payload: { currency } }),
       updateDailyLimit: (limit: number) => dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit } }),
       formatCurrency: (amount: number) => formatMoney(amount, state.currency),
