@@ -15,6 +15,12 @@ export interface AuthResponse {
     access_token: string;
     refresh_token: string;
   };
+  settings?: {
+    currency: string;
+    daily_budget: number;
+    limit_updated_at?: string | null;
+    avatar_url?: string | null;
+  };
   testLink?: string;
   note?: string;
   error?: string;
@@ -121,7 +127,7 @@ class AuthService {
     }
   }
 
-  async updateProfile(email: string, name?: string, currency?: string, dailyBudget?: number): Promise<AuthResponse> {
+  async updateProfile(email: string, name?: string, currency?: string, dailyBudget?: number, avatar?: string): Promise<AuthResponse> {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/profile`, {
         method: 'PUT',
@@ -132,7 +138,8 @@ class AuthService {
           email,
           name,
           currency,
-          dailyBudget
+          dailyBudget,
+          avatar
         }),
       });
 

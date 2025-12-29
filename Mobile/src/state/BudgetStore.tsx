@@ -39,6 +39,7 @@ export type Bill = {
   amount: number;
   dueISO: string;
   paid: boolean;
+  paidDateISO?: string | null;
   envelopeId?: string;
   reminderId?: string | null;
 };
@@ -61,12 +62,13 @@ type State = {
   dailyLimit: number;
   authLoading: boolean;
   authError: string | null;
+  lastLimitUpdateDateISO?: string | null;
 };
 
 /* ===================== ACTIONS ===================== */
 
 type Action =
-  | { type: "AUTH/LOGIN"; payload: { email: string; name?: string; token?: string } }
+  | { type: "AUTH/LOGIN"; payload: { email: string; name?: string; token?: string; lastLimitUpdateDateISO?: string | null; currency?: string; dailyLimit?: number; avatar?: string | null } }
   | { type: "AUTH/LOGOUT" }
   | { type: "AUTH/ERROR"; payload: { error: string } }
   | { type: "AUTH/LOADING"; payload: { loading: boolean } }
@@ -94,13 +96,13 @@ type Action =
     payload: Envelope;
   }
   | { type: "SETTINGS/CURRENCY"; payload: { currency: string } }
-  | { type: "SETTINGS/DAILY_LIMIT"; payload: { limit: number } };
+  | { type: "SETTINGS/DAILY_LIMIT"; payload: { limit: number; dateISO: string } };
 
 /* ===================== INITIAL STATE ===================== */
 
 const initialState: State = {
   isAuthed: false,
-  currency: "USD",
+  currency: "LKR",
   dailyLimit: 200,
   authLoading: false,
   authError: null,
@@ -109,6 +111,7 @@ const initialState: State = {
   transactions: [],
   bills: [],
   goals: [],
+  lastLimitUpdateDateISO: undefined,
 };
 
 /* ===================== REDUCER ===================== */
@@ -125,8 +128,12 @@ function reducer(state: State, action: Action): State {
         user: {
           ...state.user,
           email: action.payload.email,
-          name: action.payload.name || state.user.name
+          name: action.payload.name || state.user.name,
+          avatar: action.payload.avatar || state.user.avatar
         },
+        lastLimitUpdateDateISO: action.payload.lastLimitUpdateDateISO,
+        currency: action.payload.currency || state.currency,
+        dailyLimit: action.payload.dailyLimit || state.dailyLimit,
       };
 
     case "AUTH/LOGOUT":
@@ -199,7 +206,11 @@ function reducer(state: State, action: Action): State {
       return { ...state, currency: action.payload.currency };
 
     case "SETTINGS/DAILY_LIMIT":
-      return { ...state, dailyLimit: action.payload.limit };
+      return {
+        ...state,
+        dailyLimit: action.payload.limit,
+        lastLimitUpdateDateISO: action.payload.dateISO
+      };
 
     default:
       return state;
@@ -247,6 +258,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           amount: b.amount,
           dueISO: b.due_date,
           paid: b.is_paid,
+          paidDateISO: b.paid_date,
           envelopeId: b.category,
         }));
         dispatch({ type: "BILL/SET", payload: mapped });
@@ -331,7 +343,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
               payload: {
                 email,
                 name: userName,
-                token: loginResponse.session?.access_token
+                token: loginResponse.session?.access_token,
+                lastLimitUpdateDateISO: loginResponse.settings?.limit_updated_at,
+                currency: loginResponse.settings?.currency,
+                dailyLimit: loginResponse.settings?.daily_budget,
               }
             });
 
@@ -403,7 +418,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                 payload: {
                   email,
                   name: loginAfterSignup.user?.name || name || email.split('@')[0],
-                  token: loginAfterSignup.session?.access_token
+                  token: loginAfterSignup.session?.access_token,
+                  lastLimitUpdateDateISO: loginAfterSignup.settings?.limit_updated_at,
+                  currency: loginAfterSignup.settings?.currency,
+                  dailyLimit: loginAfterSignup.settings?.daily_budget,
+                  avatar: loginAfterSignup.settings?.avatar_url,
                 }
               });
 
@@ -444,9 +463,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (dailyBudget !== undefined) {
+              const todayStr = new Date().toISOString().split("T")[0];
               dispatch({
                 type: "SETTINGS/DAILY_LIMIT",
-                payload: { limit: dailyBudget }
+                payload: { limit: dailyBudget, dateISO: todayStr }
               });
             }
             return true;
@@ -457,14 +477,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           return false;
         }
       },
-      updateAvatar: (uri: string) => dispatch({ type: "PROFILE/AVATAR", payload: { uri } }),
+      updateAvatar: async (uri: string) => {
+        try {
+          // Update locally first for snappiness
+          dispatch({ type: "PROFILE/AVATAR", payload: { uri } });
+
+          // Persist to backend
+          const res = await authService.updateProfile(state.user.email, state.user.name, state.currency, state.dailyLimit, uri);
+          if (!res.success) {
+            console.error("Failed to persist avatar:", res.error);
+          }
+        } catch (error) {
+          console.error("updateAvatar error:", error);
+        }
+      },
       addTransaction: async (args: { envelopeId: string; title: string; amount: number; dateISO?: string }) => {
         try {
+          const d = new Date();
+          const todayLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
           const res = await expenseService.createExpense({
             envelope_id: args.envelopeId,
             description: args.title,
             amount: args.amount,
-            date: args.dateISO ? args.dateISO.split('T')[0] : new Date().toISOString().split('T')[0],
+            date: args.dateISO ? args.dateISO.split('T')[0] : todayLocal,
           });
 
           if (res.success && res.data) {
@@ -500,12 +536,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       },
       markBillPaid: async (billId, paid) => {
         const bill = state.bills.find((b) => b.id === billId);
+        if (!bill) return;
 
-        if (paid && bill?.reminderId) {
+        if (paid && bill.reminderId) {
           await cancelBillReminder(bill.reminderId);
         }
 
-        await billService.markBillPaid(billId);
+        const isNewlyPaid = paid && !bill.paid;
+
+        await billService.markBillPaid(billId, paid);
+
+        const targetEnvelope = state.envelopes.find(e => e.id === bill.envelopeId);
+
+        if (isNewlyPaid && targetEnvelope) {
+          try {
+            await value.addTransaction({
+              envelopeId: targetEnvelope.id,
+              title: `Paid Bill: ${bill.title}`,
+              amount: bill.amount,
+              dateISO: new Date().toISOString(),
+            });
+          } catch (error) {
+            console.error("Failed to add transaction for paid bill:", error);
+          }
+        }
 
         dispatch({
           type: "BILL/MARK_PAID",
@@ -595,6 +649,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
               amount: b.amount,
               dueISO: b.due_date,
               paid: b.is_paid,
+              paidDateISO: b.paid_date,
               envelopeId: b.category,
             }));
             dispatch({ type: "BILL/SET", payload: mapped });
@@ -660,19 +715,27 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       },
       updateCurrency: (currency: string) => dispatch({ type: "SETTINGS/CURRENCY", payload: { currency } }),
       updateDailyLimit: async (limit: number) => {
+        const d = new Date();
+        const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+        // Check if already updated today
+        if (state.lastLimitUpdateDateISO === todayStr) {
+          throw new Error("Daily limit can only be set once per day.");
+        }
+
         try {
-          // Persist to backend
+          // Persist to backend (We should ideally add a column for date too, but we can reuse profile update)
           const res = await authService.updateProfile(state.user.email, state.user.name, state.currency, limit);
           if (res.success) {
-            dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit } });
+            dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit, dateISO: todayStr } });
           } else {
             console.error("Failed to persist daily limit:", res.error);
-            // Even if backend fails, update local state for better UX, or alert user
-            dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit } });
+            // Fallback for UX
+            dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit, dateISO: todayStr } });
           }
         } catch (error) {
           console.error("Failed to update daily limit:", error);
-          dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit } });
+          throw error;
         }
       },
       formatCurrency: (amount: number) => formatMoney(amount, state.currency),

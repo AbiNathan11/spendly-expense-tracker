@@ -13,6 +13,7 @@ export interface Bill {
   category: string;
   is_recurring: boolean;
   is_paid: boolean;
+  paid_date: string | null;
   month: number;
   year: number;
   created_at: string;
@@ -119,11 +120,14 @@ class BillService {
   /**
    * Mark Bill as Paid
    */
-  async markBillPaid(billId: string) {
+  async markBillPaid(billId: string, paid: boolean = true) {
     try {
       const { error } = await supabase
         .from('bills')
-        .update({ is_paid: true })
+        .update({
+          is_paid: paid,
+          paid_date: paid ? new Date().toISOString() : null
+        })
         .eq('id', billId);
 
       if (error) throw error;

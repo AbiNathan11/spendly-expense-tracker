@@ -7,6 +7,21 @@ import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "../components/Screen";
 import { useBudget } from "../state/BudgetStore";
 import { formatMoney } from "../utils/format";
+
+function getEnvelopeIcon(name: string): keyof typeof Ionicons.glyphMap {
+  const lower = name.toLowerCase();
+  if (lower.includes("food") || lower.includes("groceries") || lower.includes("eat") || lower.includes("drink")) return "restaurant-outline";
+  if (lower.includes("transport") || lower.includes("car") || lower.includes("bus") || lower.includes("fuel") || lower.includes("gas") || lower.includes("uber")) return "car-outline";
+  if (lower.includes("entertainment") || lower.includes("movie") || lower.includes("fun") || lower.includes("game") || lower.includes("netflix")) return "film-outline";
+  if (lower.includes("utilit") || lower.includes("bill") || lower.includes("light") || lower.includes("water") || lower.includes("wifi") || lower.includes("phone")) return "flash-outline";
+  if (lower.includes("rent") || lower.includes("house") || lower.includes("home")) return "home-outline";
+  if (lower.includes("shopping") || lower.includes("clothe") || lower.includes("gift")) return "cart-outline";
+  if (lower.includes("health") || lower.includes("med") || lower.includes("doctor") || lower.includes("gym")) return "medical-outline";
+  if (lower.includes("save") || lower.includes("invest") || lower.includes("bank")) return "wallet-outline";
+  if (lower.includes("education") || lower.includes("book") || lower.includes("school") || lower.includes("course")) return "book-outline";
+  return "pricetag-outline";
+}
+
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -26,9 +41,10 @@ const ui = {
   primary: "#223447",
 };
 
+
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
-  const { state, updateDailyLimit, formatCurrency, refreshEnvelopes, refreshBills } = useBudget();
+  const { state, updateDailyLimit, formatCurrency, refreshEnvelopes, refreshBills, refreshTransactions } = useBudget();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [limitInput, setLimitInput] = useState("");
@@ -39,63 +55,51 @@ export function HomeScreen() {
     React.useCallback(() => {
       refreshEnvelopes();
       refreshBills();
+      refreshTransactions();
     }, [])
   );
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refreshEnvelopes(), refreshBills()]);
+    await Promise.all([refreshEnvelopes(), refreshBills(), refreshTransactions()]);
     setRefreshing(false);
   }, []);
 
   const today = useMemo(() => {
-    const dailyLimit = state.dailyLimit;
-    const todayStr = new Date().toISOString().split("T")[0];
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-    // Filter transactions to only those from today
-    const todayTransactions = state.transactions.filter(t => t.dateISO === todayStr);
+    // Show 0 if limit wasn't set today
+    const isSetToday = state.lastLimitUpdateDateISO === todayStr;
+    const dailyLimit = isSetToday ? state.dailyLimit : 0;
+
+    // Filter transactions to only those from today (robust check)
+    const todayTransactions = state.transactions.filter(t => t.dateISO && t.dateISO.startsWith(todayStr));
     const spent = todayTransactions.reduce((sum, t) => sum + t.amount, 0);
 
     const remaining = dailyLimit - spent;
     const diff = Math.abs(remaining);
-    const isOver = spent > dailyLimit;
+    const isOver = dailyLimit > 0 && spent > dailyLimit;
     const pct = dailyLimit === 0 ? 0 : Math.min(1, spent / dailyLimit);
 
     let color = "#10B981"; // Green
     if (isOver) color = "#EF4444"; // Red
-    else if (spent >= dailyLimit * 0.9) color = "#F59E0B"; // Yellow
+    else if (dailyLimit > 0 && spent >= dailyLimit * 0.9) color = "#F59E0B"; // Yellow
 
     return { dailyLimit, spent, remaining: Math.max(0, remaining), diff, isOver, pct, color };
-  }, [state.transactions, state.dailyLimit]);
+  }, [state.transactions, state.dailyLimit, state.lastLimitUpdateDateISO]);
 
   const cards = useMemo(() => {
     return state.envelopes.map((e) => {
       const left = e.budget - e.spent;
       const overspent = left < 0;
       const pct = e.budget === 0 ? 0 : Math.min(1, e.spent / e.budget);
-      const icon =
-        e.id === "groceries"
-          ? "cart-outline"
-          : e.id === "transport"
-            ? "bus-outline"
-            : e.id === "entertainment"
-              ? "game-controller-outline"
-              : "bulb-outline";
-      const iconBg = overspent ? ui.redSoft : e.id === "transport" ? ui.yellowSoft : ui.greenSoft;
+      const icon = getEnvelopeIcon(e.name);
+      const iconBg = e.color + '20';
 
       let barColor = "#10B981"; // Green
-      if (e.spent > e.budget) barColor = "#EF4444"; // Red
-      else if (e.spent >= e.budget * 0.9) barColor = "#F59E0B"; // Yellow
-      else barColor = ui.accent; // Or keep ui.accent? The user asked for envelope screen colors. 
-      // User request "the progress bar in the envelops should be...". 
-      // This is HomeScreen cards, maybe consistent logic is good. 
-      // "and become red after over the limit in the envelops screen".
-      // I'll stick to a simple color here unless requested, but Green/Red logic matches nicely.
-      // Actually previous logic was: overspent ? "#F87171" : ...
-      // I'll update this one too to be consistent.
       if (overspent) barColor = "#EF4444";
       else if (e.spent >= e.budget * 0.9) barColor = "#F59E0B";
-      else barColor = "#10B981"; // Green default
 
       return { e, left, overspent, pct, icon, iconBg, barColor };
     });
@@ -110,16 +114,30 @@ export function HomeScreen() {
     }).length;
   }, [state.bills]);
 
+  const isLocked = useMemo(() => {
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return state.lastLimitUpdateDateISO === todayStr;
+  }, [state.lastLimitUpdateDateISO]);
+
   const handleOpenLimitModal = () => {
+    if (isLocked) {
+      Alert.alert("Locked", "You've already set your limit for today! You can change it again tomorrow.");
+      return;
+    }
     setLimitInput(state.dailyLimit.toString());
     setModalVisible(true);
   };
 
-  const handleSaveLimit = () => {
+  const handleSaveLimit = async () => {
     const val = parseFloat(limitInput);
     if (!isNaN(val) && val > 0) {
-      updateDailyLimit(val);
-      setModalVisible(false);
+      try {
+        await updateDailyLimit(val);
+        setModalVisible(false);
+      } catch (error: any) {
+        Alert.alert("Locked", error.message || "Daily limit can only be set once per day.");
+      }
     } else {
       Alert.alert("Invalid Input", "Please enter a valid positive number.");
     }
@@ -172,7 +190,7 @@ export function HomeScreen() {
                   <Text style={styles.todayLimitValue}>{formatCurrency(today.dailyLimit)}</Text>
                 </View>
                 <View style={styles.editIconCircle}>
-                  <Ionicons name="pencil" size={14} color={ui.accent} />
+                  <Ionicons name={isLocked ? "lock-closed" : "pencil"} size={14} color={ui.accent} />
                 </View>
               </View>
 
@@ -219,7 +237,7 @@ export function HomeScreen() {
               >
                 <View style={styles.envelopeTop}>
                   <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
-                    <Ionicons name={icon as any} size={18} color={overspent ? "#F87171" : "#3B556B"} />
+                    <Ionicons name={icon as any} size={18} color={e.color} />
                   </View>
                   {overspent ? (
                     <Ionicons name="lock-closed-outline" size={16} color="#F87171" />

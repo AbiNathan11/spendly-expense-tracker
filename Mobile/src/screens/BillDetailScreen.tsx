@@ -58,7 +58,7 @@ function dueSubtitle(iso: string) {
 }
 
 export function BillDetailScreen({ route, navigation }: Props) {
-  const { state, markBillPaid } = useBudget();
+  const { state, markBillPaid, formatCurrency } = useBudget();
   const bill = state.bills.find((b) => b.id === route.params.billId);
   const envelope = state.envelopes.find((e) => e.id === bill?.envelopeId);
 
@@ -86,7 +86,7 @@ export function BillDetailScreen({ route, navigation }: Props) {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.detailCard}>
             <Text style={styles.vendor}>{bill.title.replace(/\s+Subscription$/i, "")}</Text>
-            <Text style={styles.amount}>{formatMoney(bill.amount)}</Text>
+            <Text style={styles.amount}>{formatCurrency(bill.amount)}</Text>
 
             <View style={styles.divider} />
 

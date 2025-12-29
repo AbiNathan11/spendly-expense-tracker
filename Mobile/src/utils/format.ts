@@ -1,8 +1,19 @@
 export function formatMoney(amount: number, currency: string = "USD") {
-  if (currency === "Rupees" || currency === "INR") {
-    return `Rs ${amount.toFixed(2)}`;
+  const formattedAmount = amount.toFixed(2);
+
+  switch (currency.toUpperCase()) {
+    case "LKR":
+    case "INR":
+      return `Rs ${formattedAmount}`;
+    case "EUR":
+      return `€${formattedAmount}`;
+    case "GBP":
+      return `£${formattedAmount}`;
+    case "JPY":
+      return `¥${formattedAmount}`;
+    default:
+      return `$${formattedAmount}`;
   }
-  return `$${amount.toFixed(2)}`;
 }
 
 export function formatDateShort(iso: string) {

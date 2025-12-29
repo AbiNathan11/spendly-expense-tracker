@@ -21,7 +21,7 @@ import type { RootStackParamList } from "../navigation/types";
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const currencies = [
-  "USD", "EUR", "GBP", "JPY", "CAD",
+  "LKR", "USD", "EUR", "GBP", "JPY", "CAD",
   "AUD", "CHF", "CNY", "INR", "BRL",
   "ZAR", "MXN", "RUB", "KRW", "SGD"
 ];
@@ -58,7 +58,11 @@ export function ProfileSettingsScreen() {
   };
 
   const handleSaveChanges = async () => {
-    const success = await updateProfile(name.trim() || state.user.name, email.trim() || state.user.email, state.currency, state.dailyLimit);
+    const success = await updateProfile(
+      name.trim() || state.user.name,
+      email.trim() || state.user.email,
+      state.currency
+    );
 
     if (success) {
       setIsEditing(false);
@@ -166,17 +170,7 @@ export function ProfileSettingsScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Email Address</Text>
-            {isEditing ? (
-              <TextInput
-                style={styles.textInput}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            ) : (
-              <Text style={styles.readOnlyValue}>{state.user.email}</Text>
-            )}
+            <Text style={styles.readOnlyValue}>{state.user.email}</Text>
           </View>
         </View>
 

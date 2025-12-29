@@ -24,7 +24,7 @@ const ui = {
 
 export function NotificationsScreen() {
     const navigation = useNavigation<Nav>();
-    const { state } = useBudget();
+    const { state, formatCurrency } = useBudget();
 
     const notifications = useMemo(() => {
         const todayStr = new Date().toISOString().split("T")[0];
@@ -84,7 +84,7 @@ export function NotificationsScreen() {
                                     onPress={() => navigation.navigate("BillDetail", { billId: item.id })}
                                 >
                                     <Text style={styles.messageText}>
-                                        <Text style={{ fontWeight: '800' }}>{item.title}</Text> {item.message} <Text style={{ fontWeight: '700' }}>({formatMoney(item.amount)})</Text>
+                                        <Text style={{ fontWeight: '800' }}>{item.title}</Text> {item.message} <Text style={{ fontWeight: '700' }}>({formatCurrency(item.amount)})</Text>
                                     </Text>
                                 </Pressable>
                             ))}

@@ -8,28 +8,28 @@ const { supabase, supabaseAdmin } = require('../config/supabase');
 router.post('/signup', async (req, res) => {
   const { email, password, name } = req.body;
   console.log('Signup request received:', { email, name, passwordProvided: !!password });
-  
+
   try {
     // Hash the password
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
-    
+
     // Insert user into our users table
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
-      .insert([{ 
+      .insert([{
         name: name || email,
         email: email,
         password_hash: passwordHash
       }])
       .select()
       .single();
-    
+
     if (userError) {
       console.log('Failed to create user in users table:', userError);
       return res.status(400).json({ success: false, error: userError.message });
     }
-    
+
     // Use admin client to create user with auto-confirmation
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -40,9 +40,9 @@ router.post('/signup', async (req, res) => {
         user_id: userData.id
       }
     });
-    
+
     console.log('Supabase signup response:', { data: data?.user ? 'User created' : 'No user', error: error?.message });
-    
+
     if (error) {
       console.log('Supabase signup error:', error);
       return res.status(400).json({ success: false, error: error.message });
@@ -55,11 +55,11 @@ router.post('/signup', async (req, res) => {
       try {
         const { error: settingsError } = await supabaseAdmin
           .from('user_settings')
-          .insert([{ 
+          .insert([{
             user_id: userId,
             full_name: name || email
           }]);
-        
+
         if (settingsError) {
           console.log('Failed to create user_settings:', settingsError.message);
           // Don't block signup - user can be created without settings initially
@@ -83,40 +83,50 @@ router.post('/signup', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   console.log('Login request received for email:', email);
-  
+
   try {
     // First authenticate with Supabase
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return res.status(400).json({ success: false, error: error.message });
-    
+
     console.log('Supabase auth successful for:', email);
-    
+
     // Fetch user data from our users table
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
       .select('id, name, email, created_at')
       .eq('email', email)
       .single();
-    
+
     console.log('Users table query result:', { userData, userError });
-    
+
     if (userError) {
       console.log('Failed to fetch user data:', userError);
       // Still return login success even if user data fetch fails
-      return res.status(200).json({ 
-        success: true, 
-        message: 'Login successful', 
-        session: data.session 
+      return res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        session: data.session
       });
     }
-    
+
     console.log('User data found:', userData);
-    
-    res.status(200).json({ 
-      success: true, 
-      message: 'Login successful', 
+
+    // Fetch user settings
+    const { data: settingsData, error: settingsError } = await supabaseAdmin
+      .from('user_settings')
+      .select('currency, daily_budget, limit_updated_at, avatar_url')
+      .eq('user_id', data.user.id)
+      .single();
+
+    console.log('User settings fetch result:', { settingsData, settingsError });
+
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
       session: data.session,
-      user: userData
+      user: userData,
+      settings: settingsData || { currency: 'LKR', daily_budget: 200, limit_updated_at: null, avatar_url: null }
     });
   } catch (err) {
     console.log('Login server error:', err);
@@ -131,14 +141,14 @@ router.post('/reset-password-test', async (req, res) => {
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: 'http://192.168.1.5:3000/reset-password'
     });
-    
+
     if (error) return res.status(400).json({ success: false, error: error.message });
-    
+
     // For testing: return a simulated magic link
     const testLink = `http://192.168.1.5:3000/reset-password#access_token=test_token&refresh_token=test_refresh_token&type=recovery`;
-    
-    res.status(200).json({ 
-      success: true, 
+
+    res.status(200).json({
+      success: true,
       message: 'Password reset link generated (for testing)',
       testLink: testLink,
       note: 'In production, this would be sent via email'
@@ -152,19 +162,19 @@ router.post('/reset-password-test', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
   const { email } = req.body;
   console.log('Password reset request received for email:', email);
-  
+
   try {
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: 'http://192.168.1.5:3000/reset-password'
     });
-    
+
     console.log('Supabase response:', { data, error });
-    
+
     if (error) {
       console.log('Supabase error:', error);
       return res.status(400).json({ success: false, error: error.message });
     }
-    
+
     console.log('Password reset email sent successfully');
     res.status(200).json({ success: true, message: 'Password reset email sent', data });
   } catch (err) {
@@ -175,14 +185,14 @@ router.post('/reset-password', async (req, res) => {
 
 // Update user profile
 router.put('/profile', async (req, res) => {
-  const { email, name, currency, dailyBudget } = req.body;
-  console.log('Profile update request:', { email, name, currency, dailyBudget });
-  
+  const { email, name, currency, dailyBudget, avatar } = req.body;
+  console.log('Profile update request:', { email, name, currency, dailyBudget, avatar });
+
   try {
     if (!email) {
       return res.status(400).json({ success: false, error: 'Email is required' });
     }
-    
+
     // Update users table (name)
     if (name) {
       console.log('Updating users table with name:', name);
@@ -190,56 +200,60 @@ router.put('/profile', async (req, res) => {
         .from('users')
         .update({ name })
         .eq('email', email);
-      
+
       if (userError) {
         console.log('Failed to update users table:', userError);
         return res.status(400).json({ success: false, error: userError.message });
       }
       console.log('Users table updated successfully');
     }
-    
+
     // Get Supabase auth user_id from auth.users table using email
     const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.listUsers();
     let supabaseUserId = null;
-    
+
     if (!authUserError && authUserData.users) {
       const authUser = authUserData.users.find(user => user.email === email);
       supabaseUserId = authUser?.id;
     }
-    
+
     if (!supabaseUserId) {
       console.log('Failed to find Supabase auth user for email:', email);
       return res.status(404).json({ success: false, error: 'Supabase auth user not found' });
     }
-    
+
     console.log('Found Supabase auth user_id:', supabaseUserId);
-    
+
     // Update Supabase auth user metadata (name and email)
     const authUpdates = {};
     if (name) authUpdates.user_metadata = { full_name: name };
-    
+
     if (Object.keys(authUpdates).length > 0) {
       console.log('Updating Supabase auth user metadata:', authUpdates);
       const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
         supabaseUserId,
         authUpdates
       );
-      
+
       if (authUpdateError) {
         console.log('Failed to update Supabase auth user:', authUpdateError);
         return res.status(400).json({ success: false, error: authUpdateError.message });
       }
       console.log('Supabase auth user updated successfully');
     }
-    
+
     // Update user_settings table (currency, daily_budget, full_name)
     const settingsUpdates = {};
     if (currency) settingsUpdates.currency = currency;
-    if (dailyBudget) settingsUpdates.daily_budget = dailyBudget;
+    if (dailyBudget) {
+      settingsUpdates.daily_budget = dailyBudget;
+      settingsUpdates.limit_updated_at = new Date().toISOString().split('T')[0];
+    }
     if (name) settingsUpdates.full_name = name;
-    
+    if (avatar) settingsUpdates.avatar_url = avatar;
+
     console.log('Settings updates to apply:', settingsUpdates);
-    
+
     if (Object.keys(settingsUpdates).length > 0) {
       // First check if user_settings record exists
       const { data: existingSettings, error: checkError } = await supabaseAdmin
@@ -247,9 +261,9 @@ router.put('/profile', async (req, res) => {
         .select('id')
         .eq('user_id', supabaseUserId)
         .single();
-      
+
       console.log('Checking existing user_settings:', { existingSettings, checkError });
-      
+
       if (checkError && checkError.code === 'PGRST116') {
         // No record exists, create one
         console.log('No existing user_settings record, creating new one');
@@ -259,7 +273,7 @@ router.put('/profile', async (req, res) => {
             user_id: supabaseUserId,
             ...settingsUpdates
           });
-        
+
         if (insertError) {
           console.log('Failed to insert user_settings:', insertError);
           return res.status(400).json({ success: false, error: insertError.message });
@@ -275,9 +289,9 @@ router.put('/profile', async (req, res) => {
           .from('user_settings')
           .update(settingsUpdates)
           .eq('user_id', supabaseUserId);
-        
+
         console.log('User settings update result:', { settingsError });
-        
+
         if (settingsError) {
           console.log('Failed to update user_settings:', settingsError);
           return res.status(400).json({ success: false, error: settingsError.message });
@@ -286,13 +300,13 @@ router.put('/profile', async (req, res) => {
         }
       }
     }
-    
+
     console.log('Profile updated successfully');
-    res.status(200).json({ 
-      success: true, 
-      message: 'Profile updated successfully' 
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully'
     });
-    
+
   } catch (err) {
     console.log('Profile update error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -303,33 +317,33 @@ router.put('/profile', async (req, res) => {
 router.get('/user-settings/:email', async (req, res) => {
   const { email } = req.params;
   console.log('Getting user settings for email:', email);
-  
+
   try {
     // Get Supabase auth user_id from auth.users table using email
     const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.listUsers();
     let supabaseUserId = null;
-    
+
     if (!authUserError && authUserData.users) {
       const authUser = authUserData.users.find(user => user.email === email);
       supabaseUserId = authUser?.id;
     }
-    
+
     if (!supabaseUserId) {
       console.log('Failed to find Supabase auth user for email:', email);
       return res.status(404).json({ success: false, error: 'Supabase auth user not found' });
     }
-    
+
     console.log('Found Supabase auth user_id:', supabaseUserId);
-    
+
     // Get user_settings
     const { data: settingsData, error: settingsError } = await supabaseAdmin
       .from('user_settings')
       .select('*')
       .eq('user_id', supabaseUserId)
       .single();
-    
+
     console.log('User settings query result:', { settingsData, settingsError });
-    
+
     if (settingsError && settingsError.code === 'PGRST116') {
       console.log('No user_settings record found');
       return res.status(404).json({ success: false, error: 'No user settings found' });
@@ -337,13 +351,13 @@ router.get('/user-settings/:email', async (req, res) => {
       console.log('Failed to fetch user settings:', settingsError);
       return res.status(400).json({ success: false, error: settingsError.message });
     }
-    
+
     console.log('User settings found:', settingsData);
-    res.status(200).json({ 
-      success: true, 
-      settings: settingsData 
+    res.status(200).json({
+      success: true,
+      settings: settingsData
     });
-    
+
   } catch (err) {
     console.log('Get user settings error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -561,7 +575,7 @@ router.post('/update-password', async (req, res) => {
       access_token: token,
       password: password
     });
-    
+
     if (error) return res.status(400).json({ success: false, error: error.message });
     res.status(200).json({ success: true, message: 'Password updated successfully' });
   } catch (err) {

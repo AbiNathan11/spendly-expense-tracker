@@ -8,6 +8,7 @@ import { Screen } from "../components/Screen";
 import { theme } from "../theme/theme";
 import { useBudget } from "../state/BudgetStore";
 import { formatDateShort, formatMoney } from "../utils/format";
+import { getEnvelopeIcon, getTransactionIcon } from "../utils/icons";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EnvelopeDetail">;
@@ -25,26 +26,9 @@ const ui = {
   fab: "#223447",
 };
 
-function envelopeEmoji(id: string) {
-  if (id === "groceries") return "🍔";
-  if (id === "transport") return "🚗";
-  if (id === "entertainment") return "🎬";
-  if (id === "utilities") return "💡";
-  return "💰";
-}
-
-function txEmoji(title: string) {
-  const t = title.toLowerCase();
-  if (t.includes("costco") || t.includes("grocery")) return "🛒";
-  if (t.includes("trader") || t.includes("market")) return "🥑";
-  if (t.includes("coffee")) return "☕";
-  if (t.includes("bus") || t.includes("uber") || t.includes("gas")) return "🚌";
-  if (t.includes("movie") || t.includes("cinema")) return "🎟️";
-  return "💳";
-}
 
 export function EnvelopeDetailScreen({ route, navigation }: Props) {
-  const { state, refreshEnvelopes, refreshTransactions } = useBudget();
+  const { state, refreshEnvelopes, refreshTransactions, formatCurrency } = useBudget();
   const [refreshing, setRefreshing] = React.useState(false);
 
   useFocusEffect(
@@ -110,23 +94,23 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
           <View style={styles.summaryCard}>
             <View style={styles.summaryTop}>
               <View style={[styles.avatarWrap, { backgroundColor: envelope.color + '20' }]}>
-                <Text style={[styles.avatarEmoji, { color: envelope.color }]}>{envelope.name.substring(0, 1).toUpperCase()}</Text>
+                <Ionicons name={getEnvelopeIcon(envelope.name)} size={30} color={envelope.color} />
               </View>
               <Text style={styles.bigTitle}>{envelope.name}</Text>
             </View>
 
             <View style={styles.kpiRow}>
               <Text style={styles.kpiLabel}>Allocated</Text>
-              <Text style={styles.kpiValue}>{formatMoney(envelope.budget)}</Text>
+              <Text style={styles.kpiValue}>{formatCurrency(envelope.budget)}</Text>
             </View>
             <View style={styles.kpiRow}>
               <Text style={styles.kpiLabel}>Spent</Text>
-              <Text style={styles.kpiValue}>{formatMoney(envelope.spent)}</Text>
+              <Text style={styles.kpiValue}>{formatCurrency(envelope.spent)}</Text>
             </View>
             <View style={styles.kpiRow}>
               <Text style={styles.kpiLabel}>Remaining</Text>
               <Text style={[styles.kpiValue, overspent ? styles.kpiDanger : styles.kpiOk]}>
-                {formatMoney(remaining)}
+                {formatCurrency(remaining)}
               </Text>
             </View>
 
@@ -147,7 +131,7 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
             {overspent ? (
               <View style={styles.overspentPill}>
                 <Ionicons name="warning-outline" size={18} color={ui.danger} />
-                <Text style={styles.overspentText}>{`Overspent by ${formatMoney(Math.abs(remaining))}`}</Text>
+                <Text style={styles.overspentText}>{`Overspent by ${formatCurrency(Math.abs(remaining))}`}</Text>
               </View>
             ) : null}
           </View>
@@ -158,14 +142,14 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
               <View key={t.id} style={styles.txCard}>
                 <View style={styles.txLeft}>
                   <View style={styles.txAvatar}>
-                    <Text style={styles.txEmoji}>{txEmoji(t.title)}</Text>
+                    <Ionicons name={getTransactionIcon(t.title)} size={20} color={ui.accent} />
                   </View>
                   <View>
                     <Text style={styles.txTitle}>{t.title}</Text>
                     <Text style={styles.txMeta}>{formatDateShort(t.dateISO)}</Text>
                   </View>
                 </View>
-                <Text style={styles.txAmount}>{formatMoney(t.amount)}</Text>
+                <Text style={styles.txAmount}>{formatCurrency(t.amount)}</Text>
               </View>
             ))}
           </View>

@@ -7,6 +7,21 @@ import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "../components/Screen";
 import { useBudget } from "../state/BudgetStore";
 import { formatMoney } from "../utils/format";
+
+function getEnvelopeIcon(name: string): keyof typeof Ionicons.glyphMap {
+  const lower = name.toLowerCase();
+  if (lower.includes("food") || lower.includes("groceries") || lower.includes("eat") || lower.includes("drink")) return "restaurant-outline";
+  if (lower.includes("transport") || lower.includes("car") || lower.includes("bus") || lower.includes("fuel") || lower.includes("gas") || lower.includes("uber")) return "car-outline";
+  if (lower.includes("entertainment") || lower.includes("movie") || lower.includes("fun") || lower.includes("game") || lower.includes("netflix")) return "film-outline";
+  if (lower.includes("utilit") || lower.includes("bill") || lower.includes("light") || lower.includes("water") || lower.includes("wifi") || lower.includes("phone")) return "flash-outline";
+  if (lower.includes("rent") || lower.includes("house") || lower.includes("home")) return "home-outline";
+  if (lower.includes("shopping") || lower.includes("clothe") || lower.includes("gift")) return "cart-outline";
+  if (lower.includes("health") || lower.includes("med") || lower.includes("doctor") || lower.includes("gym")) return "medical-outline";
+  if (lower.includes("save") || lower.includes("invest") || lower.includes("bank")) return "wallet-outline";
+  if (lower.includes("education") || lower.includes("book") || lower.includes("school") || lower.includes("course")) return "book-outline";
+  return "pricetag-outline";
+}
+
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -24,13 +39,6 @@ const ui = {
   fab: "#223447",
 };
 
-function envelopeEmoji(id: string) {
-  if (id === "groceries") return "🍔";
-  if (id === "transport") return "🚗";
-  if (id === "entertainment") return "🎬";
-  if (id === "utilities") return "💡";
-  return "💰";
-}
 
 export function EnvelopesScreen() {
   const navigation = useNavigation<Nav>();
@@ -84,7 +92,7 @@ export function EnvelopesScreen() {
                 >
                   <View style={styles.cardTop}>
                     <View style={[styles.avatarWrap, { backgroundColor: e.color + '20' }]}>
-                      <Text style={[styles.avatarEmoji, { color: e.color }]}>{e.name.substring(0, 1).toUpperCase()}</Text>
+                      <Ionicons name={getEnvelopeIcon(e.name)} size={22} color={e.color} />
                     </View>
 
                     <View style={styles.cardMid}>
@@ -139,6 +147,15 @@ export function EnvelopesScreen() {
             </View>
           )}
         </ScrollView>
+
+        {state.envelopes.length > 0 && (
+          <Pressable
+            style={styles.fab}
+            onPress={() => navigation.navigate("AddEnvelope")}
+          >
+            <Ionicons name="add" size={30} color="#FFFFFF" />
+          </Pressable>
+        )}
       </View>
     </Screen>
   );
@@ -304,5 +321,21 @@ const styles = StyleSheet.create({
   createBtnText: {
     color: "#FFFFFF",
     fontWeight: "900",
+  },
+  fab: {
+    position: "absolute",
+    right: 20,
+    bottom: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: ui.fab,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
   },
 });

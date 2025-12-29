@@ -21,13 +21,15 @@ const ui = {
   chip: "#E5E7EB",
   chipActive: "#223447",
   chipActiveText: "#FFFFFF",
-  dotDue: "#F59E0B",
+  dotDue: "#F59E0B", // Yellow for today/upcoming
+  dotOverdue: "#EF4444", // Red for passed due date
   dotPaid: "#22C55E",
   duePillBg: "#FFF3D2",
   duePillText: "#B45309",
   paidPillBg: "#DCFCE7",
   paidPillText: "#166534",
   fab: "#223447",
+  accent: "#223447",
 };
 
 const monthNames = [
@@ -70,7 +72,7 @@ function formatShortMonthDay(d: Date) {
 
 export function BillsScreen() {
   const navigation = useNavigation<Nav>();
-  const { state, markBillPaid, refreshBills } = useBudget();
+  const { state, markBillPaid, refreshBills, formatCurrency } = useBudget();
 
   const today = useMemo(() => toDateOnly(new Date()), []);
   const [cursor, setCursor] = useState(() => ({ year: today.getFullYear(), month: today.getMonth() }));
@@ -97,106 +99,99 @@ export function BillsScreen() {
     return list;
   }, [billsInMonth, filter, selected]);
 
-  const calendar = useMemo(() => {
-    const first = new Date(cursor.year, cursor.month, 1);
-    const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
-    const startWeekday = first.getDay(); // 0=Sun
+  const nextMonth = () => {
+    setCursor((c) => {
+      if (c.month === 11) return { year: c.year + 1, month: 0 };
+      return { ...c, month: c.month + 1 };
+    });
+  };
 
-    const cells: Array<{ day: number | null; date: Date | null }> = [];
-    for (let i = 0; i < startWeekday; i += 1) cells.push({ day: null, date: null });
-    for (let d = 1; d <= daysInMonth; d += 1) cells.push({ day: d, date: new Date(cursor.year, cursor.month, d) });
-    while (cells.length % 7 !== 0) cells.push({ day: null, date: null });
+  const prevMonth = () => {
+    setCursor((c) => {
+      if (c.month === 0) return { year: c.year - 1, month: 11 };
+      return { ...c, month: c.month - 1 };
+    });
+  };
 
-    return { cells };
-  }, [cursor.month, cursor.year]);
+  const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
+  const firstDay = new Date(cursor.year, cursor.month, 1).getDay();
 
-  const dayDots = useMemo(() => {
-    const map = new Map<string, { due: boolean; paid: boolean }>();
-    for (const b of billsInMonth) {
-      const key = `${b.due.getFullYear()}-${b.due.getMonth()}-${b.due.getDate()}`;
-      const prev = map.get(key) ?? { due: false, paid: false };
-      map.set(key, {
-        due: prev.due || !b.paid,
-        paid: prev.paid || b.paid,
-      });
-    }
-    return map;
-  }, [billsInMonth]);
+  const calendarDays = [];
+  // padding
+  for (let i = 0; i < firstDay; i++) {
+    calendarDays.push(null);
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    calendarDays.push(new Date(cursor.year, cursor.month, i));
+  }
 
   return (
     <Screen padded={false} style={styles.screen}>
       <View style={styles.page}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.monthHeader}>
-            <Pressable
-              style={styles.monthBtn}
-              onPress={() => {
-                const m = cursor.month - 1;
-                if (m < 0) setCursor({ year: cursor.year - 1, month: 11 });
-                else setCursor({ year: cursor.year, month: m });
-              }}
-            >
-              <Ionicons name="chevron-back" size={22} color={ui.text} />
+            <Pressable style={styles.monthBtn} onPress={prevMonth}>
+              <Ionicons name="chevron-back" size={24} color={ui.text} />
             </Pressable>
             <Text style={styles.monthTitle}>{formatMonthTitle(cursor.year, cursor.month)}</Text>
-            <Pressable
-              style={styles.monthBtn}
-              onPress={() => {
-                const m = cursor.month + 1;
-                if (m > 11) setCursor({ year: cursor.year + 1, month: 0 });
-                else setCursor({ year: cursor.year, month: m });
-              }}
-            >
-              <Ionicons name="chevron-forward" size={22} color={ui.text} />
+            <Pressable style={styles.monthBtn} onPress={nextMonth}>
+              <Ionicons name="chevron-forward" size={24} color={ui.text} />
             </Pressable>
           </View>
 
           <View style={styles.weekdays}>
-            {"SMTWTFS".split("").map((d, idx) => (
-              <Text key={`weekday-${idx}`} style={styles.weekday}>
-                {d}
-              </Text>
+            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+              <Text key={i} style={styles.weekday}>{d}</Text>
             ))}
           </View>
 
           <View style={styles.calendarGrid}>
-            {calendar.cells.map((c, idx) => {
-              const isSelected = c.date ? sameDay(c.date, selected) : false;
-              const key = c.date ? `${c.date.getFullYear()}-${c.date.getMonth()}-${c.date.getDate()}` : `${idx}`;
-              const dots = c.date ? dayDots.get(key) : undefined;
+            {calendarDays.map((d, i) => {
+              if (!d) return <View key={`p-${i}`} style={styles.dayCell} />;
+              const isSelected = sameDay(d, selected);
+              const isToday = sameDay(d, today);
+              const dayBills = state.bills.filter((b) => sameDay(new Date(b.dueISO), d));
+              const hasOverdue = dayBills.some((b) => !b.paid && new Date(b.dueISO) < today);
+              const hasUpcoming = dayBills.some((b) => !b.paid && !sameDay(new Date(b.dueISO), today) && new Date(b.dueISO) >= today);
+              const hasToday = dayBills.some((b) => !b.paid && sameDay(new Date(b.dueISO), today));
+              const hasPaid = dayBills.length > 0 && dayBills.every((b) => b.paid);
+
               return (
                 <Pressable
-                  key={idx}
+                  key={d.toISOString()}
                   style={styles.dayCell}
-                  onPress={() => {
-                    if (!c.date) return;
-                    setSelected(c.date);
-                  }}
+                  onPress={() => setSelected(d)}
                 >
-                  {c.day ? (
-                    <View style={[styles.dayCircle, isSelected ? styles.dayCircleSelected : null]}>
-                      <Text style={[styles.dayText, isSelected ? styles.dayTextSelected : null]}>{c.day}</Text>
-                      {dots ? (
-                        <View style={styles.dots}>
-                          {!dots.due && !dots.paid ? null : (
-                            <>
-                              {dots.due ? <View style={[styles.dot, { backgroundColor: ui.dotDue }]} /> : null}
-                              {dots.paid ? <View style={[styles.dot, { backgroundColor: ui.dotPaid }]} /> : null}
-                            </>
-                          )}
-                        </View>
-                      ) : null}
+                  <View style={[
+                    styles.dayCircle,
+                    isSelected ? styles.dayCircleSelected : null,
+                    isToday && !isSelected ? { backgroundColor: "#F3F4F6" } : null
+                  ]}>
+                    <Text style={[
+                      styles.dayText,
+                      isSelected ? styles.dayTextSelected : null,
+                      isToday && !isSelected ? { color: ui.accent } : null
+                    ]}>
+                      {d.getDate()}
+                    </Text>
+                    <View style={styles.dots}>
+                      {hasOverdue && <View style={[styles.dot, { backgroundColor: ui.dotOverdue }]} />}
+                      {(hasUpcoming || hasToday) && !hasOverdue && <View style={[styles.dot, { backgroundColor: ui.dotDue }]} />}
+                      {hasPaid && <View style={[styles.dot, { backgroundColor: ui.dotPaid }]} />}
                     </View>
-                  ) : (
-                    <View style={styles.dayCircle} />
-                  )}
+                  </View>
                 </Pressable>
               );
             })}
           </View>
 
           <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>{`Bills for ${formatShortMonthDay(selected)}`}</Text>
+            <Text style={styles.sheetTitle}>
+              {sameDay(selected, today) ? "Today's Bills" : `Bills for ${formatShortMonthDay(selected)}`}
+            </Text>
 
             <View style={styles.chips}>
               <Pressable
@@ -225,9 +220,20 @@ export function BillsScreen() {
               ) : (
                 selectedBills.map((b) => {
                   const { bg, icon, color } = billIcon(b.title);
+                  const isToday = sameDay(b.due, today);
+                  const isPast = b.due < today && !isToday;
+
                   const statusPill = b.paid
-                    ? { text: `Paid on ${formatShortMonthDay(b.due)}`, bg: ui.paidPillBg, fg: ui.paidPillText }
-                    : { text: "Due Today", bg: ui.duePillBg, fg: ui.duePillText };
+                    ? {
+                      text: `Paid on ${formatShortMonthDay(new Date(b.paidDateISO || b.dueISO))}`,
+                      bg: ui.paidPillBg,
+                      fg: ui.paidPillText
+                    }
+                    : {
+                      text: isToday ? "Due Today" : isPast ? "Overdue" : "Upcoming",
+                      bg: isPast ? "#FEE2E2" : ui.duePillBg,
+                      fg: isPast ? "#991B1B" : ui.duePillText
+                    };
                   return (
                     <Pressable
                       key={b.id}
@@ -243,7 +249,7 @@ export function BillsScreen() {
                           <Text style={[styles.pillText, { color: statusPill.fg }]}>{statusPill.text}</Text>
                         </View>
                       </View>
-                      <Text style={styles.billAmount}>{formatMoney(b.amount)}</Text>
+                      <Text style={styles.billAmount}>{formatCurrency(b.amount)}</Text>
                       <Pressable
                         onPress={() => markBillPaid(b.id, !b.paid)}
                         style={[styles.check, b.paid ? styles.checkOn : styles.checkOff]}
@@ -391,52 +397,46 @@ const styles = StyleSheet.create({
     marginTop: 14,
     gap: 12,
   },
-  empty: {
-    color: ui.muted,
-    fontWeight: "700",
-    paddingVertical: 10,
-  },
   billRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 10,
+    paddingVertical: 4,
   },
   billIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   billMid: {
     flex: 1,
-    gap: 6,
   },
   billTitle: {
+    fontSize: 16,
+    fontWeight: "800",
     color: ui.text,
-    fontWeight: "900",
-    fontSize: 15,
   },
   billTitleNormal: {
-    color: ui.text,
     fontWeight: "700",
-    fontSize: 15,
+  },
+  billAmount: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: ui.text,
+    marginRight: 8,
   },
   pill: {
     alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
   },
   pillText: {
-    fontWeight: "900",
-    fontSize: 12,
-  },
-  billAmount: {
-    color: ui.text,
-    fontWeight: "900",
-    marginRight: 8,
+    fontSize: 11,
+    fontWeight: "800",
   },
   check: {
     width: 26,
@@ -447,26 +447,30 @@ const styles = StyleSheet.create({
   },
   checkOff: {
     borderWidth: 2,
-    borderColor: "#D1D5DB",
-    backgroundColor: "#FFFFFF",
+    borderColor: ui.border,
   },
   checkOn: {
     backgroundColor: ui.dotPaid,
   },
+  empty: {
+    textAlign: "center",
+    color: ui.muted,
+    paddingVertical: 20,
+    fontWeight: "700",
+  },
   fab: {
     position: "absolute",
-    right: 20,
-    bottom: 0,
-    width: 66,
-    height: 66,
-    borderRadius: 33,
+    right: 18,
+    bottom: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: ui.fab,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 6,
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
   },
 });

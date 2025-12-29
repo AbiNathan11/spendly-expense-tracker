@@ -5,7 +5,6 @@ import { useFocusEffect } from "@react-navigation/native";
 
 import { Screen } from "../components/Screen";
 import { useBudget } from "../state/BudgetStore";
-import { formatMoney } from "../utils/format";
 import { reportService, MonthlyReport, WeeklyReport } from "../services/reportService";
 
 const ui = {

@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
   full_name VARCHAR(255),
   daily_budget DECIMAL(10, 2) DEFAULT 1000.00,
   currency VARCHAR(3) DEFAULT 'INR',
+  avatar_url TEXT,
+  limit_updated_at DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

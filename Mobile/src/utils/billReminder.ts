@@ -25,6 +25,7 @@ export async function scheduleBillReminder(
       title: "💸 Bill Reminder",
       body: `${title} ($${amount}) is due tomorrow`,
       sound: "default",
+      data: { billId },
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
