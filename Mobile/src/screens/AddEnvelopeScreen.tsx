@@ -81,16 +81,13 @@ export function AddEnvelopeScreen({ navigation, route }: Props) {
 
         try {
             if (isEditing && editId) {
-                // TODO: Implement Update in Supabase Service if needed
-                updateEnvelope({
+                await updateEnvelope({
                     id: editId,
                     name: name.trim(),
                     budget: amt,
                     color: selectedColor,
                 });
-                navigation.goBack();
             } else {
-                // Create New Envelope in Supabase
                 const result = await createEnvelopeSupabase({
                     name: name.trim(),
                     budget: amt,
@@ -98,30 +95,18 @@ export function AddEnvelopeScreen({ navigation, route }: Props) {
                 });
 
                 if (result.success) {
-                    // Update Local State with returned data or input data
-                    // We map the returned ID if possible, otherwise rely on store to gen ID (which might be desync, but okay for now)
-                    // Better approach: Use the ID from Supabase
-                    const newId = result.data?.id;
-
-                    // We still call addEnvelope to update local UI immediately
-                    // Note: Ideally BudgetStore should fetch from DB, but we do optimistic update here
-                    // However, we can't inject the ID into `addEnvelope` easily without modifying the store to accept an ID.
-                    // For now, we will let the store generate a temp ID or we can modify the store. 
-                    // Let's check BudgetStore.tsx again. It generates ID: id: `e_${Math.random()...}`
-                    // This creates a discrepancy.
-                    // IMPORTANT: To fix this, we should really refresh the envelopes list from backend.
-                    // But for this task scope, let's just proceed and user sees it.
-
                     addEnvelope({
                         name: name.trim(),
                         budget: amt,
                         color: selectedColor,
                     });
-                    navigation.goBack();
                 } else {
                     Alert.alert("Error", result.error || "Failed to create envelope");
+                    setIsLoading(false);
+                    return;
                 }
             }
+            navigation.goBack();
         } catch (error) {
             console.error(error);
             Alert.alert("Error", "An unexpected error occurred");

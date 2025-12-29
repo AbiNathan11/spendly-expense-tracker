@@ -13,6 +13,14 @@ const scanReceipt = async (req, res) => {
             });
         }
 
+        // Check if OpenAI is available
+        if (!openai) {
+            return res.status(503).json({
+                success: false,
+                error: 'Receipt scanning service is not available. OPENAI_API_KEY not configured.'
+            });
+        }
+
         const userId = req.user.id;
         const imageBuffer = req.file.buffer;
         const base64Image = imageBuffer.toString('base64');

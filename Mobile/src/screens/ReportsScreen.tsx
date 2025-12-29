@@ -1,10 +1,12 @@
-import React, { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, Modal, TouchableOpacity } from "react-native";
+import React, { useMemo, useState, useCallback } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View, Modal, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { Screen } from "../components/Screen";
 import { useBudget } from "../state/BudgetStore";
 import { formatMoney } from "../utils/format";
+import { reportService, MonthlyReport, WeeklyReport } from "../services/reportService";
 
 const ui = {
   bg: "#F9FAFB",
@@ -16,7 +18,7 @@ const ui = {
   success: "#22C55E",
 };
 
-type RangeKey = "month" | "qtr" | "year";
+type RangeKey = "week" | "month" | "qtr" | "year";
 
 function sum(nums: number[]) {
   return nums.reduce((s, n) => s + n, 0);
@@ -40,6 +42,7 @@ function buildDonutColors(args: { values: number[]; colors: string[]; segments: 
 }
 
 function Donut(props: { total: number; values: number[]; colors: string[] }) {
+  const { formatCurrency } = useBudget();
   const size = 150;
   const segments = 72;
   const ringRadius = 54;
@@ -71,66 +74,178 @@ function Donut(props: { total: number; values: number[]; colors: string[] }) {
       ))}
       <View style={styles.donutHole}>
         <Text style={styles.donutLabel}>Total</Text>
-        <Text style={styles.donutTotal}>{formatMoney(props.total)}</Text>
+        <Text style={styles.donutTotal}>{formatCurrency(props.total)}</Text>
       </View>
     </View>
   );
 }
 
 export function ReportsScreen() {
-  const { state } = useBudget();
-  const [range, setRange] = React.useState<RangeKey>("month");
-  const [menuOpen, setMenuOpen] = React.useState(false);
+  const { state, formatCurrency } = useBudget();
+  const [range, setRange] = useState<RangeKey>("month");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const [monthlyData, setMonthlyData] = useState<MonthlyReport | null>(null);
+  const [weeklyData, setWeeklyData] = useState<WeeklyReport | null>(null);
+
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    try {
+      const now = new Date();
+      const [mRes, wRes] = await Promise.all([
+        reportService.getMonthlyReport(now.getMonth() + 1, now.getFullYear()),
+        reportService.getWeeklyReport()
+      ]);
+
+      if (mRes.success) setMonthlyData(mRes.data || null);
+      if (wRes.success) setWeeklyData(wRes.data || null);
+    } catch (error) {
+      console.error("FetchReports error:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchReports();
+    }, [fetchReports])
+  );
 
   const byCategory = useMemo(() => {
-    // Uses actual envelope color now. Scale based on range.
-    let multiplier = 1;
-    if (range === "qtr") multiplier = 3.2;
-    if (range === "year") multiplier = 12.5;
+    if (range === "month" && monthlyData) {
+      const categories = monthlyData.envelope_breakdown.map((e) => ({
+        name: e.name,
+        value: e.spent,
+        color: state.envelopes.find(env => env.name === e.name)?.color || "#CBD5E1"
+      }));
+      return { categories, total: monthlyData.total_spent };
+    }
 
-    const categories = state.envelopes.map((e) => ({
+    if (range === "week" && weeklyData) {
+      const categories = weeklyData.envelope_breakdown.map((e) => ({
+        name: e.name,
+        value: e.total,
+        color: state.envelopes.find(env => env.name === e.name)?.color || "#CBD5E1"
+      }));
+      return { categories, total: weeklyData.total_spent };
+    }
+
+    // Dynamic calculation for QTR and YEAR from state.transactions history
+    const now = new Date();
+    let cutoff = new Date();
+    if (range === "qtr") cutoff.setMonth(now.getMonth() - 3);
+    else cutoff.setFullYear(now.getFullYear() - 1);
+
+    const relevantTx = state.transactions.filter(t => new Date(t.dateISO) >= cutoff);
+    const totalsByEnv: Record<string, number> = {};
+    relevantTx.forEach(t => {
+      totalsByEnv[t.envelopeId] = (totalsByEnv[t.envelopeId] || 0) + t.amount;
+    });
+
+    const categories = state.envelopes.map(e => ({
       name: e.name,
-      value: e.spent * multiplier,
+      value: totalsByEnv[e.id] || 0,
       color: e.color
-    }));
-    const total = sum(categories.map((c) => c.value));
+    })).filter(c => c.value > 0);
+
+    const total = sum(categories.map(c => c.value));
     return { categories, total };
-  }, [state.envelopes, range]);
+  }, [state.envelopes, state.transactions, range, monthlyData, weeklyData]);
 
   const trendData = useMemo(() => {
-    // Mock data for trends based on range
-    if (range === 'month') {
+    const now = new Date();
+
+    if (range === "month" && monthlyData) {
+      const daily = monthlyData.daily_breakdown;
+      const weeks = [0, 0, 0, 0];
+      daily.forEach((d, i) => {
+        const weekIdx = Math.min(3, Math.floor(i / 7.5));
+        weeks[weekIdx] += d.total_spent;
+      });
+      const max = Math.max(...weeks, 1);
       return {
-        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-        values: [0.65, 0.45, 0.75, 0.50], // 0-1 scale
-        spent: byCategory.total,
-        deltaPct: -5,
-        caption: "less than last month",
+        labels: ['W1', 'W2', 'W3', 'W4'],
+        values: weeks.map(v => v / max),
+        spent: monthlyData.total_spent,
+        deltaPct: 0,
+        caption: "spent this month",
         barWidth: 32
       };
-    } else if (range === 'qtr') {
+    }
+
+    if (range === "week" && weeklyData) {
+      const days = weeklyData.daily_breakdown;
+      const max = Math.max(...days.map(d => d.total_spent), 1);
       return {
-        labels: ['Oct', 'Nov', 'Dec'],
-        values: [0.8, 0.65, 0.9],
-        spent: byCategory.total,
-        deltaPct: 12,
-        caption: "more than last quarter",
-        barWidth: 40
-      };
-    } else {
-      return {
-        labels: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'],
-        values: [0.4, 0.5, 0.45, 0.6, 0.7, 0.8, 0.6, 0.55, 0.65, 0.7, 0.85, 0.9],
-        spent: byCategory.total,
-        deltaPct: 8,
-        caption: "more than last year",
-        barWidth: 8
+        labels: days.map(d => d.day.slice(0, 3)),
+        values: days.map(d => d.total_spent / max),
+        spent: weeklyData.total_spent,
+        deltaPct: 0,
+        caption: "total for this week",
+        barWidth: 20
       };
     }
-  }, [range, byCategory.total]);
+
+    if (range === "qtr") {
+      const labels: string[] = [];
+      const monthTotals: number[] = [0, 0, 0];
+      for (let i = 2; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        labels.push(d.toLocaleString('default', { month: 'short' }));
+
+        const m = d.getMonth();
+        const y = d.getFullYear();
+        monthTotals[2 - i] = state.transactions
+          .filter(t => {
+            const td = new Date(t.dateISO);
+            return td.getMonth() === m && td.getFullYear() === y;
+          })
+          .reduce((s, t) => s + t.amount, 0);
+      }
+
+      const max = Math.max(...monthTotals, 1);
+      return {
+        labels,
+        values: monthTotals.map(v => v / max),
+        spent: sum(monthTotals),
+        deltaPct: 0,
+        caption: "spent last 3 months",
+        barWidth: 40
+      };
+    }
+
+    // YEAR
+    const labels: string[] = [];
+    const yearTotals: number[] = Array(12).fill(0);
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      labels.push(d.toLocaleString('default', { month: 'narrow' }));
+
+      const m = d.getMonth();
+      const y = d.getFullYear();
+      yearTotals[11 - i] = state.transactions
+        .filter(t => {
+          const td = new Date(t.dateISO);
+          return td.getMonth() === m && td.getFullYear() === y;
+        })
+        .reduce((s, t) => s + t.amount, 0);
+    }
+    const max = Math.max(...yearTotals, 1);
+    return {
+      labels,
+      values: yearTotals.map(v => v / max),
+      spent: sum(yearTotals),
+      deltaPct: 0,
+      caption: "total for last 12 months",
+      barWidth: 8
+    };
+  }, [range, state.transactions, monthlyData, weeklyData]);
 
   const getRangeLabel = () => {
     switch (range) {
+      case "week": return "This Week";
       case "month": return "This Month";
       case "qtr": return "Last 3 Months";
       case "year": return "This Year";
@@ -146,23 +261,28 @@ export function ReportsScreen() {
               <Text style={styles.headerTitle}>Financial Reports</Text>
               <Text style={styles.headerSubtitle}>{getRangeLabel()}</Text>
             </View>
-            <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)}>
-              <Ionicons name="ellipsis-vertical" size={20} color={ui.text} />
-            </Pressable>
+            <View style={styles.headerRight}>
+              {loading && <ActivityIndicator size="small" color={ui.accent} style={{ marginRight: 10 }} />}
+              <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)}>
+                <Ionicons name="filter" size={20} color={ui.text} />
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Spending Trend</Text>
             <View style={styles.amountRow}>
-              <Text style={styles.bigAmount}>{formatMoney(trendData.spent)}</Text>
-              <View style={styles.delta}>
-                <Ionicons
-                  name={trendData.deltaPct <= 0 ? "arrow-down" : "arrow-up"}
-                  size={14}
-                  color={ui.success}
-                />
-                <Text style={styles.deltaText}>{`${Math.abs(trendData.deltaPct)}%`}</Text>
-              </View>
+              <Text style={styles.bigAmount}>{formatCurrency(trendData.spent)}</Text>
+              {trendData.deltaPct !== 0 && (
+                <View style={styles.delta}>
+                  <Ionicons
+                    name={trendData.deltaPct <= 0 ? "arrow-down" : "arrow-up"}
+                    size={14}
+                    color={ui.success}
+                  />
+                  <Text style={styles.deltaText}>{`${Math.abs(trendData.deltaPct)}%`}</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.caption}>{trendData.caption}</Text>
 
@@ -191,7 +311,7 @@ export function ReportsScreen() {
                 <View key={c.name} style={styles.legendRow}>
                   <View style={[styles.legendDot, { backgroundColor: c.color }]} />
                   <Text style={styles.legendName}>{c.name}</Text>
-                  <Text style={styles.legendValue}>{formatMoney(c.value)}</Text>
+                  <Text style={styles.legendValue}>{formatCurrency(c.value)}</Text>
                 </View>
               ))}
             </View>
@@ -212,6 +332,13 @@ export function ReportsScreen() {
           >
             <View style={styles.menuDropdown}>
               <Text style={styles.menuHeader}>Select Range</Text>
+              <TouchableOpacity
+                style={[styles.menuItem, range === 'week' && styles.menuItemActive]}
+                onPress={() => { setRange('week'); setMenuOpen(false); }}
+              >
+                <Text style={[styles.menuText, range === 'week' && styles.menuTextActive]}>This Week</Text>
+                {range === 'week' && <Ionicons name="checkmark" size={18} color={ui.accent} />}
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.menuItem, range === 'month' && styles.menuItemActive]}
                 onPress={() => { setRange('month'); setMenuOpen(false); }}
@@ -260,6 +387,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 6,
     marginBottom: 6,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   headerTitle: {
     color: ui.text,

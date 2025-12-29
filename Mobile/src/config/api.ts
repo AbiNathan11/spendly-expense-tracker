@@ -10,14 +10,8 @@ import { Platform } from 'react-native';
 // For Physical Device: use your computer's IP address
 const getApiUrl = () => {
     if (__DEV__) {
-        // Development mode
-        if (Platform.OS === 'android') {
-            return 'http://10.0.2.2:3000/api'; // Android emulator
-        }
-        // For iOS simulator or physical device, use your computer's IP
         // Find your IP: Windows -> ipconfig, Mac -> ifconfig
-        return 'http://localhost:3000/api'; // iOS simulator
-        // return 'http://192.168.1.XXX:3000/api'; // For physical device
+        return 'http://192.168.1.5:3000/api';
     } else {
         // Production mode - replace with your deployed backend URL
         return 'https://your-backend-url.com/api';

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, Modal, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { Pressable, ScrollView, StyleSheet, Text, View, Modal, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, RefreshControl } from "react-native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -28,15 +28,35 @@ const ui = {
 
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
-  const { state, updateDailyLimit, formatCurrency } = useBudget();
+  const { state, updateDailyLimit, formatCurrency, refreshEnvelopes, refreshBills } = useBudget();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [limitInput, setLimitInput] = useState("");
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  // Auto-refresh when screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshEnvelopes();
+      refreshBills();
+    }, [])
+  );
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([refreshEnvelopes(), refreshBills()]);
+    setRefreshing(false);
+  }, []);
 
   const today = useMemo(() => {
     const dailyLimit = state.dailyLimit;
-    const spent = state.transactions.reduce((sum, t) => sum + t.amount, 0);
-    const remaining = dailyLimit - spent; // Allow negative
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    // Filter transactions to only those from today
+    const todayTransactions = state.transactions.filter(t => t.dateISO === todayStr);
+    const spent = todayTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+    const remaining = dailyLimit - spent;
     const diff = Math.abs(remaining);
     const isOver = spent > dailyLimit;
     const pct = dailyLimit === 0 ? 0 : Math.min(1, spent / dailyLimit);
@@ -108,7 +128,13 @@ export function HomeScreen() {
   return (
     <Screen padded={false} style={styles.screen}>
       <View style={styles.page}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           {/* Header */}
           <View style={styles.header}>
             <Pressable
@@ -140,29 +166,45 @@ export function HomeScreen() {
 
           <Pressable onPress={handleOpenLimitModal}>
             <View style={styles.todayCard}>
-              <View style={styles.todayRow}>
-                <Text style={styles.todayLabel}>Spent</Text>
-                <Text style={styles.todayValue}>
-                  <Text style={styles.todayValueStrong}>{formatCurrency(today.spent)}</Text>
-                  <Text style={styles.todayValueMuted}>{` of ${formatCurrency(today.dailyLimit)}`}</Text>
-                </Text>
+              <View style={styles.todayHeader}>
+                <View style={styles.todayHeaderLeft}>
+                  <Text style={styles.todayLabel}>Daily Limit</Text>
+                  <Text style={styles.todayLimitValue}>{formatCurrency(today.dailyLimit)}</Text>
+                </View>
+                <View style={styles.editIconCircle}>
+                  <Ionicons name="pencil" size={14} color={ui.accent} />
+                </View>
               </View>
-              <View style={styles.todayTrack}>
-                <View style={[styles.todayFill, { width: `${today.pct * 100}%`, backgroundColor: today.color }]} />
+
+              <View style={styles.todayMain}>
+                <View style={styles.todayRow}>
+                  <Text style={styles.spentLabel}>Spent Today</Text>
+                  <Text style={styles.spentValue}>{formatCurrency(today.spent)}</Text>
+                </View>
+
+                <View style={styles.todayTrack}>
+                  <View style={[styles.todayFill, { width: `${today.pct * 100}%`, backgroundColor: today.color }]} />
+                </View>
+
+                <View style={styles.todayRow}>
+                  <Text style={styles.remainingLabel}>
+                    {today.isOver ? "Over Limit" : "Remaining"}
+                  </Text>
+                  <Text style={[styles.remainingValue, { color: today.isOver ? "#EF4444" : "#10B981" }]}>
+                    {formatCurrency(today.remaining)}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.remaining}>{`${formatCurrency(today.remaining)} remaining`}</Text>
 
               {today.isOver && (
                 <View style={styles.warnBox}>
                   <Ionicons name="warning-outline" size={18} color="#B91C1C" />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.warnTitle}>Daily Limit Exceeded!</Text>
-                    <Text style={styles.warnBody}>{`You are ${formatCurrency(today.diff)} over your daily limit.`}</Text>
+                    <Text style={styles.warnTitle}>Budget Exceeded!</Text>
+                    <Text style={styles.warnBody}>{`You've spent ${formatCurrency(today.diff)} more than your daily limit.`}</Text>
                   </View>
                 </View>
               )}
-
-
             </View>
           </Pressable>
 
@@ -297,54 +339,74 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 2,
   },
-  todayRow: {
+  todayHeader: {
     flexDirection: "row",
-    alignItems: "baseline",
     justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: ui.border,
+    marginBottom: 16,
+  },
+  todayHeaderLeft: {
+    gap: 2,
   },
   todayLabel: {
     color: ui.muted,
+    fontSize: 12,
     fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
-  todayValue: {
+  todayLimitValue: {
     color: ui.text,
-  },
-  todayValueStrong: {
-    color: ui.text,
+    fontSize: 22,
     fontWeight: "900",
-    fontSize: 18,
   },
-  todayValueMuted: {
+  editIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: ui.bg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  todayMain: {
+    gap: 12,
+  },
+  todayRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  spentLabel: {
+    color: ui.text,
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  spentValue: {
+    color: ui.text,
+    fontWeight: "800",
+    fontSize: 15,
+  },
+  remainingLabel: {
     color: ui.muted,
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: 13,
+  },
+  remainingValue: {
+    fontWeight: "800",
+    fontSize: 15,
   },
   todayTrack: {
-    marginTop: 12,
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: ui.track,
     overflow: "hidden",
   },
   todayFill: {
     height: "100%",
-    backgroundColor: ui.accent,
-    borderRadius: 3,
-  },
-  remaining: {
-    marginTop: 10,
-    textAlign: "right",
-    color: ui.accent,
-    fontWeight: "800",
-  },
-  editHint: {
-    marginTop: 8,
-    alignItems: "center",
-  },
-  editHintText: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    fontWeight: "500",
+    borderRadius: 4,
   },
   h2: {
     marginTop: 26,
