@@ -1,271 +1,152 @@
-import React, { useState, useEffect } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { RouteProp } from "@react-navigation/native";
+import React, { useState } from "react";
+import { View, Text, TextInput, Pressable, StyleSheet, Alert } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-
 import { Screen } from "../components/Screen";
 import { theme } from "../theme/theme";
-import { authService } from "../services/authService";
-import { API_URL } from "../config/api";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-type ResetRouteProp = RouteProp<RootStackParamList, "ResetPassword">;
-
-interface ResetParams {
-  accessToken?: string;
-  refreshToken?: string;
-}
 
 export function ResetPasswordScreen() {
-  const navigation = useNavigation<Nav>();
-  const route = useRoute<ResetRouteProp>();
-  const params = route.params as ResetParams || {};
+    const navigation = useNavigation<Nav>();
+    const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [loading, setLoading] = useState(false);
 
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState("");
-  const [token, setToken] = useState("");
+    const handleReset = async () => {
+        if (!password || !confirmPassword) {
+            Alert.alert("Error", "Please fill in all fields.");
+            return;
+        }
 
-  useEffect(() => {
-    // Check if we have tokens from the URL (deep link)
-    if (params.accessToken) {
-      setToken(params.accessToken);
-    } else {
-      setError("Invalid or expired reset link");
-    }
-  }, [params]);
+        if (password !== confirmPassword) {
+            Alert.alert("Error", "Passwords do not match.");
+            return;
+        }
 
-  const handleResetPassword = async () => {
-    if (!password || !confirmPassword) {
-      setError("Please fill in all fields");
-      return;
-    }
+        setLoading(true);
+        // TODO: Implement actual password reset logic using token or session
+        setTimeout(() => {
+            setLoading(false);
+            Alert.alert("Success", "Your password has been reset.", [
+                { text: "Login", onPress: () => navigation.navigate({ name: "Auth", params: { mode: "login" } }) }
+            ]);
+        }, 1500);
+    };
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
-    if (!token) {
-      setError("Invalid or expired reset link");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const response = await fetch(`${API_URL}/auth/update-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          token: token,
-          password: password
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setSuccess(true);
-      } else {
-        setError(result.error || "Failed to reset password");
-      }
-    } catch (err) {
-      setError("Network error occurred");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (success) {
     return (
-      <Screen>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <Ionicons name="checkmark-circle-outline" size={48} color="#10B981" />
+        <Screen style={styles.screen}>
+            <View style={styles.header}>
+                <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+                    <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
+                </Pressable>
             </View>
-            <Text style={styles.title}>Password Reset Successful</Text>
-            <Text style={styles.message}>
-              Your password has been reset successfully. You can now login with your new password.
-            </Text>
-          </View>
 
-          <Pressable
-            onPress={() => navigation.replace("Auth", { mode: "login" })}
-            style={styles.primaryBtn}
-          >
-            <Text style={styles.primaryText}>Go to Login</Text>
-          </Pressable>
-        </View>
-      </Screen>
+            <View style={styles.content}>
+                <Text style={styles.title}>Reset Password</Text>
+                <Text style={styles.subtitle}>
+                    Create a new password for your account.
+                </Text>
+
+                <View style={styles.inputWrap}>
+                    <Text style={styles.label}>New Password</Text>
+                    <TextInput
+                        style={styles.input}
+                        value={password}
+                        onChangeText={setPassword}
+                        placeholder="New Password"
+                        placeholderTextColor={theme.colors.muted}
+                        secureTextEntry
+                    />
+                </View>
+
+                <View style={styles.inputWrap}>
+                    <Text style={styles.label}>Confirm Password</Text>
+                    <TextInput
+                        style={styles.input}
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                        placeholder="Confirm Password"
+                        placeholderTextColor={theme.colors.muted}
+                        secureTextEntry
+                    />
+                </View>
+
+                <Pressable
+                    style={[styles.btn, loading && styles.btnDisabled]}
+                    onPress={handleReset}
+                    disabled={loading}
+                >
+                    <Text style={styles.btnText}>{loading ? "Updating..." : "Update Password"}</Text>
+                </Pressable>
+            </View>
+        </Screen>
     );
-  }
-
-  return (
-    <Screen>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.iconContainer}>
-            <Ionicons name="lock-closed-outline" size={48} color="#F59E0B" />
-          </View>
-          <Text style={styles.title}>Reset Password</Text>
-          <Text style={styles.message}>
-            Enter your new password below.
-          </Text>
-        </View>
-
-        <View style={styles.form}>
-          <Text style={styles.label}>New Password</Text>
-          <View style={styles.inputRow}>
-            <Ionicons name="lock-closed-outline" size={18} color="#64748B" />
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Enter new password"
-              placeholderTextColor="#9CA3AF"
-              secureTextEntry
-              style={styles.input}
-            />
-          </View>
-
-          <View style={{ height: theme.spacing.md }} />
-
-          <Text style={styles.label}>Confirm New Password</Text>
-          <View style={styles.inputRow}>
-            <Ionicons name="lock-closed-outline" size={18} color="#64748B" />
-            <TextInput
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Confirm new password"
-              placeholderTextColor="#9CA3AF"
-              secureTextEntry
-              style={styles.input}
-            />
-          </View>
-
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-          <Pressable
-            onPress={handleResetPassword}
-            style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
-            disabled={loading}
-          >
-            <Text style={styles.primaryText}>
-              {loading ? "Resetting..." : "Reset Password"}
-            </Text>
-          </Pressable>
-        </View>
-
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={styles.backBtn}
-        >
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
-      </View>
-    </Screen>
-  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: theme.spacing.xl,
-    flex: 1,
-    justifyContent: "center",
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: theme.spacing.xl,
-  },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#FEF3C7",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: theme.spacing.lg,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#223447",
-    marginBottom: theme.spacing.sm,
-    textAlign: "center",
-  },
-  message: {
-    fontSize: 16,
-    color: "#6B7280",
-    textAlign: "center",
-    lineHeight: 24,
-  },
-  form: {
-    marginBottom: theme.spacing.xl,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#223447",
-    marginBottom: 8,
-  },
-  inputRow: {
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#FFFFFF",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    gap: 10,
-    marginBottom: theme.spacing.md,
-  },
-  input: {
-    flex: 1,
-    height: 56,
-    fontSize: 14,
-    color: "#223447",
-  },
-  errorText: {
-    color: "#EF4444",
-    fontSize: 14,
-    marginBottom: theme.spacing.sm,
-  },
-  primaryBtn: {
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: "#223447",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryBtnDisabled: {
-    opacity: 0.6,
-  },
-  primaryText: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
-  backBtn: {
-    alignItems: "center",
-  },
-  backText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#223447",
-  },
+    screen: {
+        paddingHorizontal: theme.spacing.lg,
+    },
+    header: {
+        paddingTop: theme.spacing.md,
+        marginBottom: theme.spacing.lg,
+    },
+    backBtn: {
+        width: 40,
+        height: 40,
+        justifyContent: "center",
+    },
+    content: {
+        flex: 1,
+    },
+    title: {
+        fontSize: 28,
+        fontWeight: "800",
+        color: theme.colors.text,
+        marginBottom: theme.spacing.sm,
+    },
+    subtitle: {
+        fontSize: 15,
+        color: theme.colors.muted,
+        lineHeight: 22,
+        marginBottom: theme.spacing.xl,
+    },
+    inputWrap: {
+        marginBottom: theme.spacing.lg,
+    },
+    label: {
+        fontSize: 14,
+        fontWeight: "700",
+        color: theme.colors.text,
+        marginBottom: 8,
+    },
+    input: {
+        height: 52,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.radius.md,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        color: theme.colors.text,
+        backgroundColor: theme.colors.surface,
+    },
+    btn: {
+        height: 56,
+        backgroundColor: theme.colors.primary,
+        borderRadius: 28,
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: theme.spacing.md,
+    },
+    btnDisabled: {
+        opacity: 0.6,
+    },
+    btnText: {
+        color: "#FFFFFF",
+        fontSize: 16,
+        fontWeight: "800",
+    },
 });

@@ -347,6 +347,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                 lastLimitUpdateDateISO: loginResponse.settings?.limit_updated_at,
                 currency: loginResponse.settings?.currency,
                 dailyLimit: loginResponse.settings?.daily_budget,
+                avatar: loginResponse.settings?.avatar_url,
               }
             });
 

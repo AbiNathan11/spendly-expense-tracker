@@ -453,18 +453,13 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   currencyBadge: {
-    backgroundColor: ui.bg,
     alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: ui.border,
+    paddingVertical: 4,
   },
   currencyBadgeText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: ui.accent,
+    fontSize: 16,
+    fontWeight: "700",
+    color: ui.text,
   },
   logoutBtn: {
     flexDirection: "row",
