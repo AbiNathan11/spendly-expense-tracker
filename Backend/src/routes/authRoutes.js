@@ -3,6 +3,11 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 
 const { supabase, supabaseAdmin } = require('../config/supabase');
+const { sendOTPEmail } = require('../services/emailService');
+
+// In-memory OTP storage (in production, use Redis or database)
+const otpStore = new Map(); // { email: { otp, expiresAt, verified } }
+
 
 // Signup
 router.post('/signup', async (req, res) => {
@@ -133,6 +138,197 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// ============ OTP-BASED PASSWORD RESET ============
+
+// Generate and send OTP
+router.post('/send-otp', async (req, res) => {
+  const { email } = req.body;
+  console.log('OTP request received for email:', email);
+
+  try {
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+
+    // Check if user exists
+    const { data: userData, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('email')
+      .eq('email', email)
+      .single();
+
+    if (userError || !userData) {
+      console.log('User not found:', email);
+      return res.status(404).json({ success: false, error: 'User not found with this email' });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    // Store OTP
+    otpStore.set(email, {
+      otp,
+      expiresAt,
+      verified: false
+    });
+
+    console.log('Generated OTP for', email, ':', otp); // For development - remove in production
+
+    // Send OTP via email
+    const emailSent = await sendOTPEmail(email, otp);
+
+    if (!emailSent) {
+      console.log('Failed to send OTP email');
+      // Still return success for development, but log the OTP
+      return res.status(200).json({
+        success: true,
+        message: 'OTP generated (email service unavailable)',
+        devOtp: otp // Only for development - remove in production
+      });
+    }
+
+    console.log('OTP sent successfully to:', email);
+    res.status(200).json({
+      success: true,
+      message: 'OTP sent to your email address'
+    });
+
+  } catch (err) {
+    console.log('Send OTP error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Verify OTP
+router.post('/verify-otp', async (req, res) => {
+  const { email, otp } = req.body;
+  console.log('OTP verification request for email:', email);
+
+  try {
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, error: 'Email and OTP are required' });
+    }
+
+    const storedData = otpStore.get(email);
+
+    if (!storedData) {
+      console.log('No OTP found for email:', email);
+      return res.status(400).json({ success: false, error: 'No OTP found. Please request a new one.' });
+    }
+
+    // Check if OTP expired
+    if (Date.now() > storedData.expiresAt) {
+      console.log('OTP expired for:', email);
+      otpStore.delete(email);
+      return res.status(400).json({ success: false, error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Verify OTP
+    if (storedData.otp !== otp) {
+      console.log('Invalid OTP for:', email);
+      return res.status(400).json({ success: false, error: 'Invalid OTP. Please try again.' });
+    }
+
+    // Mark as verified
+    storedData.verified = true;
+    otpStore.set(email, storedData);
+
+    console.log('OTP verified successfully for:', email);
+    res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully'
+    });
+
+  } catch (err) {
+    console.log('Verify OTP error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Reset password with verified OTP
+router.post('/reset-password-with-otp', async (req, res) => {
+  const { email, newPassword } = req.body;
+  console.log('Password reset request for email:', email);
+
+  try {
+    if (!email || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Email and new password are required' });
+    }
+
+    const storedData = otpStore.get(email);
+
+    if (!storedData) {
+      console.log('No OTP session found for:', email);
+      return res.status(400).json({ success: false, error: 'No OTP session found. Please start over.' });
+    }
+
+    if (!storedData.verified) {
+      console.log('OTP not verified for:', email);
+      return res.status(400).json({ success: false, error: 'OTP not verified. Please verify OTP first.' });
+    }
+
+    // Check if OTP session expired
+    if (Date.now() > storedData.expiresAt) {
+      console.log('OTP session expired for:', email);
+      otpStore.delete(email);
+      return res.status(400).json({ success: false, error: 'OTP session expired. Please start over.' });
+    }
+
+    // Hash the new password
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password in users table
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update({ password_hash: passwordHash })
+      .eq('email', email);
+
+    if (updateError) {
+      console.log('Failed to update password in users table:', updateError);
+      return res.status(400).json({ success: false, error: updateError.message });
+    }
+
+    // Update password in Supabase Auth
+    const { data: authUserData, error: authUserError } = await supabaseAdmin.auth.admin.listUsers();
+    let supabaseUserId = null;
+
+    if (!authUserError && authUserData.users) {
+      const authUser = authUserData.users.find(user => user.email === email);
+      supabaseUserId = authUser?.id;
+    }
+
+    if (supabaseUserId) {
+      const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+        supabaseUserId,
+        { password: newPassword }
+      );
+
+      if (authUpdateError) {
+        console.log('Failed to update Supabase auth password:', authUpdateError);
+        // Continue anyway as we updated the users table
+      }
+    }
+
+    // Clear OTP session
+    otpStore.delete(email);
+
+    console.log('Password reset successfully for:', email);
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully'
+    });
+
+  } catch (err) {
+    console.log('Reset password error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============ END OTP-BASED PASSWORD RESET ============
+
 // Test password reset (shows link in browser instead of sending email)
 router.post('/reset-password-test', async (req, res) => {
   const { email } = req.body;
