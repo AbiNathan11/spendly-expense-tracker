@@ -3,16 +3,16 @@ require('dotenv').config();
 
 // Create transporter for sending emails
 const createTransporter = () => {
-    // For development, you can use Gmail or any SMTP service
-    // For production, use a service like SendGrid, AWS SES, etc.
+  // For development, you can use Gmail or any SMTP service
+  // For production, use a service like SendGrid, AWS SES, etc.
 
-    return nodemailer.createTransport({
-        service: 'gmail', // or 'smtp.gmail.com'
-        auth: {
-            user: process.env.EMAIL_USER, // Your email
-            pass: process.env.EMAIL_PASSWORD // Your app password (not regular password)
-        }
-    });
+  return nodemailer.createTransport({
+    service: 'gmail', // or 'smtp.gmail.com'
+    auth: {
+      user: process.env.EMAIL_USER, // Your email
+      pass: process.env.EMAIL_PASSWORD // Your app password (not regular password)
+    }
+  });
 };
 
 /**
@@ -22,14 +22,14 @@ const createTransporter = () => {
  * @returns {Promise<boolean>} - Success status
  */
 const sendOTPEmail = async (email, otp) => {
-    try {
-        const transporter = createTransporter();
+  try {
+    const transporter = createTransporter();
 
-        const mailOptions = {
-            from: `"Spendly" <${process.env.EMAIL_USER}>`,
-            to: email,
-            subject: 'Password Reset OTP - Spendly',
-            html: `
+    const mailOptions = {
+      from: `"Spendly" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Password Reset OTP - Spendly',
+      html: `
         <!DOCTYPE html>
         <html>
         <head>
@@ -91,7 +91,7 @@ const sendOTPEmail = async (email, otp) => {
         <body>
           <div class="container">
             <div class="header">
-              <div class="logo">💰 Spendly</div>
+              <div class="logo">Spendly</div>
               <h2 style="color: #223447; margin: 0;">Password Reset Request</h2>
             </div>
             
@@ -123,17 +123,17 @@ const sendOTPEmail = async (email, otp) => {
         </body>
         </html>
       `
-        };
+    };
 
-        const info = await transporter.sendMail(mailOptions);
-        console.log('OTP email sent successfully:', info.messageId);
-        return true;
-    } catch (error) {
-        console.error('Error sending OTP email:', error);
-        return false;
-    }
+    const info = await transporter.sendMail(mailOptions);
+    console.log('OTP email sent successfully:', info.messageId);
+    return true;
+  } catch (error) {
+    console.error('Error sending OTP email:', error);
+    return false;
+  }
 };
 
 module.exports = {
-    sendOTPEmail
+  sendOTPEmail
 };

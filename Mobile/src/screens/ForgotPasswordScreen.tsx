@@ -103,10 +103,13 @@ export function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
     screen: {
         paddingHorizontal: theme.spacing.lg,
+        alignItems: "center",
     },
     header: {
         paddingTop: theme.spacing.md,
         marginBottom: theme.spacing.lg,
+        width: "100%",
+        maxWidth: 400,
     },
     backBtn: {
         width: 40,
@@ -115,6 +118,8 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
+        width: "90%",
+        maxWidth: 400,
     },
     title: {
         fontSize: 28,

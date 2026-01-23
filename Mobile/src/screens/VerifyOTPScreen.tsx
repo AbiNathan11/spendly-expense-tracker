@@ -182,10 +182,13 @@ export function VerifyOTPScreen() {
 const styles = StyleSheet.create({
     screen: {
         paddingHorizontal: theme.spacing.lg,
+        alignItems: "center",
     },
     header: {
         paddingTop: theme.spacing.md,
         marginBottom: theme.spacing.lg,
+        width: "100%",
+        maxWidth: 400,
     },
     backBtn: {
         width: 40,
@@ -195,6 +198,8 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         alignItems: "center",
+        width: "90%",
+        maxWidth: 400,
     },
     iconContainer: {
         marginBottom: theme.spacing.xl,
