@@ -70,7 +70,10 @@ class ApiService {
     ): Promise<ApiResponse<T>> {
         try {
             const headers = await this.getHeaders(includeAuth);
-            const response = await fetch(`${this.baseUrl}${endpoint}`, {
+            const url = `${this.baseUrl}${endpoint}`;
+            console.log(`API POST: ${url}`);
+
+            const response = await fetch(url, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(body),
@@ -80,10 +83,13 @@ class ApiService {
             return data;
         } catch (error) {
             console.error('API POST Error:', error);
+            console.error('Endpoint:', endpoint);
+            console.error('Base URL:', this.baseUrl);
             return {
                 success: false,
-                error: 'Network error. Please check your connection.',
-            };
+                error: error instanceof Error ? error.message : 'Network request failed',
+                message: 'Network error occurred',
+            } as ApiResponse<T>;
         }
     }
 

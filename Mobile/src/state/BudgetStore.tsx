@@ -318,9 +318,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           console.log("Backend login response:", loginResponse);
 
           if (loginResponse.success) {
-            console.log("Backend login successful, setting Supabase session");
+            console.log("Backend login successful");
 
-            // Set Supabase session using the tokens from backend
+            // Set Supabase session using the tokens from backend (ONLY ONCE)
             if (loginResponse.session?.access_token && loginResponse.session?.refresh_token) {
               const { error: sessionError } = await supabase.auth.setSession({
                 access_token: loginResponse.session.access_token,
@@ -334,6 +334,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
               }
 
               console.log("Supabase session set successfully");
+            } else {
+              console.warn("No session tokens received from backend");
             }
 
             const userName = loginResponse.user?.name || name || email.split('@')[0];
@@ -375,30 +377,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           console.log("Backend signup response:", signupResponse);
 
           if (signupResponse.success) {
-            console.log("Backend signup successful, setting Supabase session");
+            console.log("Backend signup successful, performing auto-login");
 
-            // Set Supabase session using the tokens from backend
-            if (signupResponse.session?.access_token && signupResponse.session?.refresh_token) {
-              const { error: sessionError } = await supabase.auth.setSession({
-                access_token: signupResponse.session.access_token,
-                refresh_token: signupResponse.session.refresh_token,
-              });
-
-              if (sessionError) {
-                console.error("Failed to set Supabase session:", sessionError);
-                dispatch({ type: "AUTH/ERROR", payload: { error: `Session error: ${sessionError.message}` } });
-                return false;
-              }
-
-              console.log("Supabase session set successfully");
-            }
-
-            // Auto-login after signup
+            // Auto-login after signup (this will set the session)
             const loginAfterSignup = await authService.login({ email, password });
             console.log("Auto-login after signup response:", loginAfterSignup);
 
             if (loginAfterSignup.success) {
-              // Set Supabase session for auto-login
+              // Set Supabase session for auto-login (ONLY ONCE)
               if (loginAfterSignup.session?.access_token && loginAfterSignup.session?.refresh_token) {
                 const { error: sessionError } = await supabase.auth.setSession({
                   access_token: loginAfterSignup.session.access_token,
@@ -412,6 +398,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                 }
 
                 console.log("Supabase session set for auto-login");
+              } else {
+                console.warn("No session tokens received from auto-login");
               }
 
               dispatch({
