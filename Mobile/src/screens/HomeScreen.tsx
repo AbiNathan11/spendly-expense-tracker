@@ -228,37 +228,47 @@ export function HomeScreen() {
 
           <Text style={styles.h2}>Your Envelopes</Text>
 
-          <View style={styles.grid}>
-            {cards.map(({ e, left, overspent, pct, icon, iconBg, barColor }) => (
-              <Pressable
-                key={e.id}
-                style={styles.envelopeCard}
-                onPress={() => navigation.navigate("EnvelopeDetail", { envelopeId: e.id })}
-              >
-                <View style={styles.envelopeTop}>
-                  <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
-                    <Ionicons name={icon as any} size={18} color={e.color} />
+          {cards.length === 0 ? (
+            <View style={styles.emptyEnvelopes}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="mail-open-outline" size={28} color={ui.muted} />
+              </View>
+              <Text style={styles.emptyTitle}>No Envelopes Yet</Text>
+              <Text style={styles.emptySubtitle}>Start by creating an envelope to track your spending categories.</Text>
+            </View>
+          ) : (
+            <View style={styles.grid}>
+              {cards.map(({ e, left, overspent, pct, icon, iconBg, barColor }) => (
+                <Pressable
+                  key={e.id}
+                  style={styles.envelopeCard}
+                  onPress={() => navigation.navigate("EnvelopeDetail", { envelopeId: e.id })}
+                >
+                  <View style={styles.envelopeTop}>
+                    <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
+                      <Ionicons name={icon as any} size={18} color={e.color} />
+                    </View>
+                    {overspent ? (
+                      <Ionicons name="lock-closed-outline" size={16} color="#F87171" />
+                    ) : null}
                   </View>
+
+                  <Text style={styles.envelopeName}>{e.name}</Text>
                   {overspent ? (
-                    <Ionicons name="lock-closed-outline" size={16} color="#F87171" />
-                  ) : null}
-                </View>
+                    <Text style={[styles.envelopeMeta, { color: "#F87171" }]}>{`${formatCurrency(
+                      Math.abs(left)
+                    )} overspent`}</Text>
+                  ) : (
+                    <Text style={styles.envelopeMeta}>{`${formatCurrency(left)} left of ${formatCurrency(e.budget)}`}</Text>
+                  )}
 
-                <Text style={styles.envelopeName}>{e.name}</Text>
-                {overspent ? (
-                  <Text style={[styles.envelopeMeta, { color: "#F87171" }]}>{`${formatCurrency(
-                    Math.abs(left)
-                  )} overspent`}</Text>
-                ) : (
-                  <Text style={styles.envelopeMeta}>{`${formatCurrency(left)} left of ${formatCurrency(e.budget)}`}</Text>
-                )}
-
-                <View style={styles.barTrack}>
-                  <View style={[styles.barFill, { width: `${pct * 100}%`, backgroundColor: barColor }]} />
-                </View>
-              </Pressable>
-            ))}
-          </View>
+                  <View style={styles.barTrack}>
+                    <View style={[styles.barFill, { width: `${pct * 100}%`, backgroundColor: barColor }]} />
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          )}
         </ScrollView>
       </View>
 
@@ -590,5 +600,39 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: "600",
     lineHeight: 18,
+  },
+  emptyEnvelopes: {
+    marginTop: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: ui.border,
+    padding: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: ui.text,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: ui.muted,
+    textAlign: "center",
+    lineHeight: 20,
+    fontWeight: "600",
+    marginBottom: 0,
+    paddingHorizontal: 20,
   },
 });

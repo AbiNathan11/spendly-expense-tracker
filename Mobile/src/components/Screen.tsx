@@ -7,17 +7,18 @@ export function Screen(props: {
   children: React.ReactNode;
   padded?: boolean;
   scroll?: boolean;
-  style?: ViewStyle;
+  style?: ViewStyle | ViewStyle[];
+  ignoreSafe?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const padded = props.padded ?? true;
-  const bg = theme?.colors?.bg ?? "#0B1220";
-  const padStyle: ViewStyle = {
+  const bg = theme?.colors?.bg ?? "#F9FAFB";
+  const padStyle: ViewStyle = !props.ignoreSafe ? {
     paddingTop: insets.top,
     paddingBottom: insets.bottom,
     paddingLeft: insets.left,
     paddingRight: insets.right,
-  };
+  } : {};
 
   const content = (
     <View

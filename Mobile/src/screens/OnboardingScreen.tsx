@@ -63,7 +63,7 @@ export function OnboardingScreen() {
   };
 
   return (
-    <Screen padded={false} style={styles.screen}>
+    <Screen padded={false} ignoreSafe style={[styles.screen, { backgroundColor: ui.bg }]}>
       <View style={styles.container}>
         {/* Illustration Area */}
         <View style={styles.illustrationArea}>

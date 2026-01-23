@@ -82,7 +82,10 @@ export function ProfileSettingsScreen() {
         style: "destructive",
         onPress: () => {
           logout();
-          navigation.reset({ index: 0, routes: [{ name: "Onboarding" }] });
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Auth", params: { mode: "login" } }],
+          });
         }
       }
     ]);
