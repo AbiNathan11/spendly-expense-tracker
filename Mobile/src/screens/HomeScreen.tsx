@@ -238,9 +238,9 @@ export function HomeScreen() {
             </View>
           ) : (
             <View style={styles.grid}>
-              {cards.map(({ e, left, overspent, pct, icon, iconBg, barColor }) => (
+              {cards.map(({ e, left, overspent, pct, icon, iconBg, barColor }, index) => (
                 <Pressable
-                  key={e.id}
+                  key={`home-env-${e.id || index}`}
                   style={styles.envelopeCard}
                   onPress={() => navigation.navigate("EnvelopeDetail", { envelopeId: e.id })}
                 >

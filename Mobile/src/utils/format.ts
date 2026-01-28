@@ -1,19 +1,28 @@
 export function formatMoney(amount: number, currency: string = "USD") {
   const formattedAmount = amount.toFixed(2);
+  const up = currency.toUpperCase();
 
-  switch (currency.toUpperCase()) {
-    case "LKR":
-    case "INR":
-      return `Rs ${formattedAmount}`;
-    case "EUR":
-      return `€${formattedAmount}`;
-    case "GBP":
-      return `£${formattedAmount}`;
-    case "JPY":
-      return `¥${formattedAmount}`;
-    default:
-      return `$${formattedAmount}`;
-  }
+  const symbols: Record<string, string> = {
+    "LKR": "Rs ",
+    "INR": "₹",
+    "USD": "$",
+    "EUR": "€",
+    "GBP": "£",
+    "JPY": "¥",
+    "CNY": "¥",
+    "CAD": "C$",
+    "AUD": "A$",
+    "CHF": "Fr ",
+    "BRL": "R$",
+    "ZAR": "R ",
+    "MXN": "MX$",
+    "RUB": "₽",
+    "KRW": "₩",
+    "SGD": "S$",
+  };
+
+  const symbol = symbols[up] || (up + " ");
+  return `${symbol}${formattedAmount}`;
 }
 
 export function formatDateShort(iso: string) {

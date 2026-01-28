@@ -1,6 +1,7 @@
 import React from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { Swipeable } from "react-native-gesture-handler";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -42,7 +43,7 @@ const ui = {
 
 export function EnvelopesScreen() {
   const navigation = useNavigation<Nav>();
-  const { state, formatCurrency, refreshEnvelopes } = useBudget();
+  const { state, formatCurrency, refreshEnvelopes, deleteEnvelope } = useBudget();
   const [refreshing, setRefreshing] = React.useState(false);
 
   useFocusEffect(
@@ -56,6 +57,26 @@ export function EnvelopesScreen() {
     await refreshEnvelopes();
     setRefreshing(false);
   }, []);
+
+  const handleDelete = (id: string, name: string) => {
+    Alert.alert(
+      "Delete Envelope",
+      `Are you sure you want to delete "${name}"? This will also remove all transactions associated with it.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const success = await deleteEnvelope(id);
+            if (!success) {
+              Alert.alert("Error", "Failed to delete envelope.");
+            }
+          }
+        },
+      ]
+    );
+  };
 
   return (
     <Screen padded={false} style={styles.screen}>
@@ -74,7 +95,7 @@ export function EnvelopesScreen() {
           </View>
 
           <View style={styles.list}>
-            {state.envelopes.map((e) => {
+            {state.envelopes.map((e, index) => {
               const pct = e.budget === 0 ? 0 : e.spent / e.budget;
               const pctLabel = `${Math.round(pct * 100)}%`;
               const left = e.budget - e.spent;
@@ -85,45 +106,58 @@ export function EnvelopesScreen() {
               const statusText = overspent ? `${formatCurrency(Math.abs(left))} over` : `${formatCurrency(left)} left`;
 
               return (
-                <Pressable
-                  key={e.id}
-                  style={styles.card}
-                  onPress={() => navigation.navigate("EnvelopeDetail", { envelopeId: e.id })}
+                <Swipeable
+                  key={`env-swipe-${e.id || index}`}
+                  renderRightActions={() => (
+                    <Pressable
+                      style={styles.deleteAction}
+                      onPress={() => handleDelete(e.id, e.name)}
+                    >
+                      <Ionicons name="trash-outline" size={32} color="#EF4444" />
+                    </Pressable>
+                  )}
+                  containerStyle={styles.swipeContainer}
                 >
-                  <View style={styles.cardTop}>
-                    <View style={[styles.avatarWrap, { backgroundColor: e.color + '20' }]}>
-                      <Ionicons name={getEnvelopeIcon(e.name)} size={22} color={e.color} />
-                    </View>
-
-                    <View style={styles.cardMid}>
-                      <Text style={styles.name}>{e.name}</Text>
-                      <Text style={[styles.status, overspent ? styles.statusOver : null]}>{statusText}</Text>
-                    </View>
-
-                    <Text style={[styles.pct, overspent ? styles.pctOver : null]}>{pctLabel}</Text>
-                  </View>
-
-                  <View style={styles.progressTrack}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        { width: `${Math.min(1, Math.max(0, pct)) * 100}%`, backgroundColor: barColor },
-                      ]}
-                    />
-                  </View>
-
-                  <Text style={styles.spentLine}>{`${formatCurrency(e.spent)} of ${formatCurrency(e.budget)} spent`}</Text>
-
-                  {overspent ? (
-                    <View style={styles.warnBox}>
-                      <Ionicons name="warning-outline" size={18} color={ui.warnText} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.warnTitle}>A little over on {e.name}!</Text>
-                        <Text style={styles.warnBody}>Let's try to get back on track next week.</Text>
+                  <Pressable
+                    key={`env-item-${e.id || index}`}
+                    style={styles.card}
+                    onPress={() => navigation.navigate("EnvelopeDetail", { envelopeId: e.id })}
+                  >
+                    <View style={styles.cardTop}>
+                      <View style={[styles.avatarWrap, { backgroundColor: e.color + '20' }]}>
+                        <Ionicons name={getEnvelopeIcon(e.name)} size={22} color={e.color} />
                       </View>
+
+                      <View style={styles.cardMid}>
+                        <Text style={styles.name}>{e.name}</Text>
+                        <Text style={[styles.status, overspent ? styles.statusOver : null]}>{statusText}</Text>
+                      </View>
+
+                      <Text style={[styles.pct, overspent ? styles.pctOver : null]}>{pctLabel}</Text>
                     </View>
-                  ) : null}
-                </Pressable>
+
+                    <View style={styles.progressTrack}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          { width: `${Math.min(1, Math.max(0, pct)) * 100}%`, backgroundColor: barColor },
+                        ]}
+                      />
+                    </View>
+
+                    <Text style={styles.spentLine}>{`${formatCurrency(e.spent)} of ${formatCurrency(e.budget)} spent`}</Text>
+
+                    {overspent ? (
+                      <View style={styles.warnBox}>
+                        <Ionicons name="warning-outline" size={18} color={ui.warnText} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.warnTitle}>A little over on {e.name}!</Text>
+                          <Text style={styles.warnBody}>Let's try to get back on track next week.</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                </Swipeable>
               );
             })}
           </View>
@@ -337,5 +371,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 4.65,
+  },
+  swipeContainer: {
+    borderRadius: 22,
+  },
+  deleteAction: {
+    backgroundColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderRadius: 22,
+    marginLeft: 10,
+    height: "100%",
   },
 });

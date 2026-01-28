@@ -79,6 +79,7 @@ type Action =
     type: "TX/ADD";
     payload: Transaction;
   }
+  | { type: "TX/DELETE"; payload: string }
   | { type: "BILL/SET"; payload: Bill[] }
   | { type: "BILL/ADD"; payload: Bill }
   | { type: "BILL/UPDATE"; payload: Bill }
@@ -95,6 +96,7 @@ type Action =
     type: "ENVELOPE/UPDATE";
     payload: Envelope;
   }
+  | { type: "ENVELOPE/DELETE"; payload: string }
   | { type: "SETTINGS/CURRENCY"; payload: { currency: string } }
   | { type: "SETTINGS/DAILY_LIMIT"; payload: { limit: number; dateISO: string } };
 
@@ -137,7 +139,11 @@ function reducer(state: State, action: Action): State {
       };
 
     case "AUTH/LOGOUT":
-      return { ...state, isAuthed: false, authError: null };
+      return {
+        ...initialState,
+        isAuthed: false,
+        authError: null
+      };
     case "AUTH/ERROR":
       return { ...state, authLoading: false, authError: action.payload.error };
     case "AUTH/LOADING":
@@ -160,6 +166,12 @@ function reducer(state: State, action: Action): State {
     case "TX/ADD": {
       return { ...state, transactions: [action.payload, ...state.transactions] };
     }
+
+    case "TX/DELETE":
+      return {
+        ...state,
+        transactions: state.transactions.filter((t) => t.id !== action.payload),
+      };
 
     case "BILL/SET":
       return { ...state, bills: action.payload };
@@ -202,6 +214,12 @@ function reducer(state: State, action: Action): State {
         ),
       };
 
+    case "ENVELOPE/DELETE":
+      return {
+        ...state,
+        envelopes: state.envelopes.filter((e) => e.id !== action.payload),
+      };
+
     case "SETTINGS/CURRENCY":
       return { ...state, currency: action.payload.currency };
 
@@ -227,6 +245,7 @@ type BudgetContextValue = {
   updateProfile: (name: string, email: string, currency?: string, dailyBudget?: number) => Promise<boolean>;
   updateAvatar: (uri: string) => void;
   addTransaction: (args: { envelopeId: string; title: string; amount: number; dateISO?: string }) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<boolean>;
   refreshTransactions: (envelopeId?: string) => Promise<void>;
   markBillPaid: (billId: string, paid: boolean) => Promise<void>;
   addBill: (args: { title: string; amount: number; dueISO: string; envelopeId?: string }) => Promise<void>;
@@ -234,6 +253,7 @@ type BudgetContextValue = {
   refreshBills: () => Promise<void>;
   addEnvelope: (args: { name: string; budget: number; color: string }) => Promise<void>;
   updateEnvelope: (args: { id: string; name: string; budget: number; color: string }) => Promise<void>;
+  deleteEnvelope: (id: string) => Promise<boolean>;
   refreshEnvelopes: () => Promise<void>;
   updateCurrency: (currency: string) => void;
   updateDailyLimit: (limit: number) => Promise<void>;
@@ -246,6 +266,50 @@ const BudgetContext = createContext<BudgetContextValue | null>(null);
 
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+
+  /* 🔹 RESTORE SESSION ON APP START */
+  useEffect(() => {
+    const restoreSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        console.log("Restored persistent session for:", session.user.email);
+
+        // Populate basic info from session
+        dispatch({
+          type: "AUTH/LOGIN",
+          payload: {
+            email: session.user.email!,
+            name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+          }
+        });
+
+        // Backend will re-sync more details (currency etc) on next data load or settings fetch
+      }
+    };
+
+    restoreSession();
+
+    // Listen for auth state changes (helps with cross-tab/module sync)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        dispatch({ type: "AUTH/LOGOUT" });
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session?.user && !state.isAuthed) {
+          dispatch({
+            type: "AUTH/LOGIN",
+            payload: {
+              email: session.user.email!,
+              name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+            }
+          });
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   /* 🔹 LOAD BILLS FROM SUPABASE */
   useEffect(() => {
@@ -435,34 +499,33 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       },
       logout: () => dispatch({ type: "AUTH/LOGOUT" }),
       updateProfile: async (name: string, email: string, currency?: string, dailyBudget?: number) => {
+        // 1. Dispatch optimistic updates immediately
+        dispatch({
+          type: "PROFILE/UPDATE",
+          payload: { name, email }
+        });
+
+        if (currency) {
+          dispatch({
+            type: "SETTINGS/CURRENCY",
+            payload: { currency }
+          });
+        }
+
+        if (dailyBudget !== undefined) {
+          const todayStr = new Date().toISOString().split("T")[0];
+          dispatch({
+            type: "SETTINGS/DAILY_LIMIT",
+            payload: { limit: dailyBudget, dateISO: todayStr }
+          });
+        }
+
         try {
           const response = await authService.updateProfile(email, name, currency, dailyBudget);
-
-          if (response.success) {
-            dispatch({
-              type: "PROFILE/UPDATE",
-              payload: { name, email }
-            });
-
-            if (currency) {
-              dispatch({
-                type: "SETTINGS/CURRENCY",
-                payload: { currency }
-              });
-            }
-
-            if (dailyBudget !== undefined) {
-              const todayStr = new Date().toISOString().split("T")[0];
-              dispatch({
-                type: "SETTINGS/DAILY_LIMIT",
-                payload: { limit: dailyBudget, dateISO: todayStr }
-              });
-            }
-            return true;
-          } else {
-            return false;
-          }
+          return response.success;
         } catch (error) {
+          console.error("updateProfile error:", error);
+          // Refresh from server or handle error if needed, but for "speed" we keep the optimistic state
           return false;
         }
       },
@@ -481,29 +544,85 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
       },
       addTransaction: async (args: { envelopeId: string; title: string; amount: number; dateISO?: string }) => {
-        try {
-          const d = new Date();
-          const todayLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const tempId = `temp-${Date.now()}`;
+        const dateStr = args.dateISO ? args.dateISO : new Date().toISOString();
 
+        // 1. Create a "fake" optimistic transaction
+        const optimTx: Transaction = {
+          id: tempId,
+          envelopeId: args.envelopeId,
+          title: args.title,
+          amount: args.amount,
+          dateISO: dateStr,
+        };
+
+        // 2. Dispatch the transaction immediately
+        dispatch({ type: "TX/ADD", payload: optimTx });
+
+        // 3. Update the envelope balance optimistically
+        const env = state.envelopes.find(e => e.id === args.envelopeId);
+        if (env) {
+          dispatch({
+            type: "ENVELOPE/UPDATE",
+            payload: { ...env, spent: env.spent + args.amount }
+          });
+        }
+
+        try {
           const res = await expenseService.createExpense({
             envelope_id: args.envelopeId,
             description: args.title,
             amount: args.amount,
-            date: args.dateISO ? args.dateISO.split('T')[0] : todayLocal,
+            date: dateStr.split('T')[0],
           });
 
-          if (res.success && res.data) {
-            // Refresh state from DB to get updated balances and transactions
-            await Promise.all([
-              value.refreshEnvelopes(),
-              value.refreshTransactions(),
-            ]);
+          if (res.success) {
+            // Once saved, refresh for real server state in the background
+            value.refreshEnvelopes();
+            value.refreshTransactions();
           } else {
-            throw new Error(res.error || "Failed to save transaction");
+            console.error("Backend failed to save tx, reverting would be ideal but refreshing state handles it.");
+            value.refreshEnvelopes();
+            value.refreshTransactions();
           }
         } catch (error) {
           console.error("addTransaction error:", error);
+          value.refreshEnvelopes();
+          value.refreshTransactions();
           throw error;
+        }
+      },
+      deleteTransaction: async (id: string) => {
+        // Optimistic update: remove from local state immediately
+        dispatch({ type: "TX/DELETE", payload: id });
+
+        try {
+          const res = await expenseService.deleteExpense(id);
+          if (res.success) {
+            // Refresh envelopes in the background to sync Spent/Balance from server truth
+            const date = new Date();
+            envelopeService.getEnvelopeStats(date.getMonth() + 1, date.getFullYear()).then(envRes => {
+              if (envRes.data) {
+                const mapped: Envelope[] = envRes.data.map((e) => ({
+                  id: e.id,
+                  name: e.name,
+                  budget: e.allocated_amount,
+                  spent: e.spent,
+                  color: e.icon,
+                }));
+                dispatch({ type: "ENVELOPE/SET", payload: mapped });
+              }
+            });
+            return true;
+          } else {
+            // Log error but don't force rollback to keep UI snappy, 
+            // the next refresh will fix state if really failed.
+            console.error("Backend delete failed:", res.error);
+            return false;
+          }
+        } catch (error) {
+          console.error("deleteTransaction error:", error);
+          return false;
         }
       },
       refreshTransactions: async (envelopeId?: string) => {
@@ -527,105 +646,102 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const bill = state.bills.find((b) => b.id === billId);
         if (!bill) return;
 
-        if (paid && bill.reminderId) {
-          await cancelBillReminder(bill.reminderId);
-        }
-
-        const isNewlyPaid = paid && !bill.paid;
-
-        await billService.markBillPaid(billId, paid);
-
-        const targetEnvelope = state.envelopes.find(e => e.id === bill.envelopeId);
-
-        if (isNewlyPaid && targetEnvelope) {
-          try {
-            await value.addTransaction({
-              envelopeId: targetEnvelope.id,
-              title: `Paid Bill: ${bill.title}`,
-              amount: bill.amount,
-              dateISO: new Date().toISOString(),
-            });
-          } catch (error) {
-            console.error("Failed to add transaction for paid bill:", error);
-          }
-        }
-
+        // 1. Dispatch immediately
         dispatch({
           type: "BILL/MARK_PAID",
           payload: { billId, paid },
         });
-      },
-      addBill: async (args) => {
-        // Helper function to parse YYYY-MM-DD without timezone issues
-        const parseLocalDate = (dateString: string) => {
-          const [year, month, day] = dateString.split('-').map(Number);
-          return new Date(year, month - 1, day); // month is 0-indexed
-        };
 
-        const parsedDate = parseLocalDate(args.dueISO);
+        if (paid && bill.reminderId) {
+          cancelBillReminder(bill.reminderId).catch(console.error);
+        }
 
-        const billData = {
-          name: args.title,
-          amount: args.amount,
-          due_date: args.dueISO,
-          category: args.envelopeId ?? "general",
-          month: parsedDate.getMonth() + 1,
-          year: parsedDate.getFullYear(),
-        };
+        const isNewlyPaid = paid && !bill.paid;
 
         try {
-          const res = await billService.createBill(billData);
+          await billService.markBillPaid(billId, paid);
 
-          if (!res.data) {
-            throw new Error(res.error ? String(res.error) : "Failed to create bill");
+          const targetEnvelope = state.envelopes.find(e => e.id === bill.envelopeId);
+          if (isNewlyPaid && targetEnvelope) {
+            // Note: addTransaction is already optimistic
+            value.addTransaction({
+              envelopeId: targetEnvelope.id,
+              title: `Paid Bill: ${bill.title}`,
+              amount: bill.amount,
+              dateISO: new Date().toISOString(),
+            }).catch(console.error);
           }
+        } catch (error) {
+          console.error("markBillPaid error, refreshing to recover:", error);
+          value.refreshBills();
+        }
+      },
+      addBill: async (args) => {
+        const tempId = `temp-bill-${Date.now()}`;
 
-          const reminderId = await scheduleBillReminder(
-            res.data.id,
-            res.data.name,
-            res.data.amount,
-            res.data.due_date
-          );
+        // 1. Dispatch optimistic bill
+        const optimBill: Bill = {
+          id: tempId,
+          title: args.title,
+          amount: args.amount,
+          dueISO: args.dueISO,
+          paid: false,
+          envelopeId: args.envelopeId,
+        };
 
-          const newBill = {
-            id: res.data.id,
-            title: res.data.name,
-            amount: res.data.amount,
-            dueISO: res.data.due_date,
-            paid: res.data.is_paid,
-            envelopeId: res.data.category,
-            reminderId,
-          };
+        dispatch({ type: "BILL/ADD", payload: optimBill });
 
-          dispatch({
-            type: "BILL/ADD",
-            payload: newBill,
+        try {
+          const parsedDate = args.dueISO.split('-').map(Number);
+          const res = await billService.createBill({
+            name: args.title,
+            amount: args.amount,
+            due_date: args.dueISO,
+            category: args.envelopeId ?? "general",
+            month: parsedDate[1],
+            year: parsedDate[0],
           });
+
+          if (res.data) {
+            scheduleBillReminder(
+              res.data.id,
+              res.data.name,
+              res.data.amount,
+              res.data.due_date
+            ).catch(console.error);
+
+            // Background refresh to get real ID
+            value.refreshBills();
+          }
         } catch (error) {
           console.error("addBill error:", error);
+          value.refreshBills();
           throw error;
         }
       },
       updateBill: async (args) => {
-        const res = await billService.updateBill(args.id, {
-          name: args.title,
-          amount: args.amount,
-          due_date: args.dueISO,
-          category: args.envelopeId,
-        });
-
-        if (res.data) {
+        const existing = state.bills.find(b => b.id === args.id);
+        if (existing) {
+          // 1. Dispatch optimistic update
           dispatch({
             type: "BILL/UPDATE",
-            payload: {
-              id: res.data.id,
-              title: res.data.name,
-              amount: res.data.amount,
-              dueISO: res.data.due_date,
-              paid: res.data.is_paid,
-              envelopeId: res.data.category,
-            },
+            payload: { ...existing, title: args.title, amount: args.amount, dueISO: args.dueISO, envelopeId: args.envelopeId }
           });
+        }
+
+        try {
+          const res = await billService.updateBill(args.id, {
+            name: args.title,
+            amount: args.amount,
+            due_date: args.dueISO,
+            category: args.envelopeId,
+          });
+          if (res.data) {
+            value.refreshBills();
+          }
+        } catch (error) {
+          console.error("updateBill error:", error);
+          value.refreshBills();
         }
       },
       refreshBills: async () => {
@@ -667,6 +783,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       },
       addEnvelope: async (args: { name: string; budget: number; color: string }) => {
         const date = new Date();
+        const tempId = `temp-env-${Date.now()}`;
+
+        // 1. Create a "fake" optimistic envelope
+        const optimEnv: Envelope = {
+          id: tempId,
+          name: args.name,
+          budget: args.budget,
+          spent: 0,
+          color: args.color,
+        };
+
+        // 2. Dispatch immediately
+        dispatch({ type: "ENVELOPE/ADD", payload: optimEnv });
+
         try {
           const res = await envelopeService.createEnvelope({
             name: args.name,
@@ -676,16 +806,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             year: date.getFullYear(),
           });
 
-          if (res.data) {
-            // Fetch updated list from database to get calculated fields like 'spent'
-            await value.refreshEnvelopes();
+          if (res.success) {
+            // Once saved, refresh for real server state and real IDs
+            value.refreshEnvelopes();
+          } else {
+            console.error("Backend failed to create envelope, refreshing state to recover.");
+            value.refreshEnvelopes();
           }
         } catch (error) {
           console.error("addEnvelope error:", error);
+          value.refreshEnvelopes();
           throw error;
         }
       },
       updateEnvelope: async (args: { id: string; name: string; budget: number; color: string }) => {
+        // 1. Find existing to preserve 'spent'
+        const existing = state.envelopes.find(e => e.id === args.id);
+        if (existing) {
+          // 2. Dispatch optimistic update
+          dispatch({
+            type: "ENVELOPE/UPDATE",
+            payload: { ...existing, name: args.name, budget: args.budget, color: args.color }
+          });
+        }
+
         try {
           const res = await envelopeService.updateEnvelope(args.id, {
             name: args.name,
@@ -693,38 +837,69 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             icon: args.color,
           });
 
-          if (res.data) {
-            // Fetch updated list from database to get calculated fields like 'spent'
-            await value.refreshEnvelopes();
+          if (res.success) {
+            // Success, background refresh just in case
+            value.refreshEnvelopes();
+          } else {
+            console.error("Backend failed to update envelope, refreshing state.");
+            value.refreshEnvelopes();
           }
         } catch (error) {
           console.error("updateEnvelope error:", error);
+          value.refreshEnvelopes();
           throw error;
         }
       },
-      updateCurrency: (currency: string) => dispatch({ type: "SETTINGS/CURRENCY", payload: { currency } }),
+      deleteEnvelope: async (id: string) => {
+        // Optimistic update: remove from local state immediately
+        dispatch({ type: "ENVELOPE/DELETE", payload: id });
+
+        try {
+          const res = await envelopeService.deleteEnvelope(id);
+          if (res.success) {
+            return true;
+          }
+          console.error("Backend delete envelope failed:", res.error);
+          return false;
+        } catch (error) {
+          console.error("deleteEnvelope error:", error);
+          return false;
+        }
+      },
+      updateCurrency: async (currency: string) => {
+        // 1. Dispatch locally first
+        dispatch({ type: "SETTINGS/CURRENCY", payload: { currency } });
+
+        try {
+          // 2. Persist to backend
+          const res = await authService.updateProfile(state.user.email, state.user.name, currency, state.dailyLimit);
+          if (!res.success) {
+            console.error("Failed to persist currency:", res.error);
+          }
+        } catch (error) {
+          console.error("updateCurrency background error:", error);
+        }
+      },
       updateDailyLimit: async (limit: number) => {
         const d = new Date();
         const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-        // Check if already updated today
+        // Check if already updated today (Policy check)
         if (state.lastLimitUpdateDateISO === todayStr) {
           throw new Error("Daily limit can only be set once per day.");
         }
 
+        // 1. Dispatch optimistic update immediately
+        dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit, dateISO: todayStr } });
+
         try {
-          // Persist to backend (We should ideally add a column for date too, but we can reuse profile update)
+          // Persist to backend in background
           const res = await authService.updateProfile(state.user.email, state.user.name, state.currency, limit);
-          if (res.success) {
-            dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit, dateISO: todayStr } });
-          } else {
+          if (!res.success) {
             console.error("Failed to persist daily limit:", res.error);
-            // Fallback for UX
-            dispatch({ type: "SETTINGS/DAILY_LIMIT", payload: { limit, dateISO: todayStr } });
           }
         } catch (error) {
-          console.error("Failed to update daily limit:", error);
-          throw error;
+          console.error("Failed to update daily limit in background:", error);
         }
       },
       formatCurrency: (amount: number) => formatMoney(amount, state.currency),

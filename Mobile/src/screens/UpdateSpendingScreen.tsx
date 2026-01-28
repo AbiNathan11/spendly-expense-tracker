@@ -72,7 +72,7 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
               <TextInput
                 value={amount}
                 onChangeText={setAmount}
-                placeholder="0.00"
+                placeholder={formatCurrency(0)}
                 placeholderTextColor={ui.fieldPh}
                 keyboardType="numeric"
                 style={styles.amountInput}
@@ -106,9 +106,9 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
 
             {pickerOpen ? (
               <View style={styles.pickerList}>
-                {envelopes.map((e) => (
+                {envelopes.map((e, idx) => (
                   <Pressable
-                    key={e.id}
+                    key={`us-env-${e.id || idx}`}
                     style={styles.pickerItem}
                     onPress={() => {
                       setEnvelopeId(e.id);
@@ -178,15 +178,16 @@ export function UpdateSpendingScreen({ route, navigation }: Props) {
               }
 
               try {
-                await addTransaction({
+                addTransaction({
                   envelopeId,
                   title: title.trim(),
                   amount: amt,
                   dateISO: date.toISOString()
                 });
+                // Go back immediately for speed
                 navigation.goBack();
               } catch (error) {
-                Alert.alert("Error", "Failed to log expense. Please try again.");
+                Alert.alert("Error", "Failed to start saving transaction.");
               }
             }}
           >

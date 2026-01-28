@@ -49,7 +49,7 @@ export function AuthScreen() {
     } else {
       success = await login(email, password);
     }
-    
+
     if (success) {
       navigation.replace("AppTabs");
     } else {
@@ -151,7 +151,9 @@ export function AuthScreen() {
             disabled={state.authLoading}
           >
             <Text style={styles.primaryText}>
-              {state.authLoading ? "Please wait..." : primaryLabel}
+              {state.authLoading
+                ? (mode === "login" ? "Logging in..." : "Signing up...")
+                : primaryLabel}
             </Text>
           </Pressable>
         </View>

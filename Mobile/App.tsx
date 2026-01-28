@@ -18,20 +18,6 @@ import { supabase } from "./src/config/supabase";
 export default function App() {
 
   useEffect(() => {
-    // Clear any stale Supabase sessions on app start
-    const clearStaleSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          console.log("Clearing stale session on app start");
-          await supabase.auth.signOut();
-        }
-      } catch (error) {
-        console.error("Error clearing stale session:", error);
-      }
-    };
-
-    clearStaleSession();
     registerForNotifications();
   }, []);
 

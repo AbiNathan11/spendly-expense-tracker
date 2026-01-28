@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between", // Spread left and right
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl,
+    paddingBottom: 60,
     paddingTop: theme.spacing.md,
   },
   dots: {
