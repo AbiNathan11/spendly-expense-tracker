@@ -307,7 +307,7 @@ export function ReportsScreen() {
 
             <View style={styles.legend}>
               {byCategory.categories.map((c, idx) => (
-                <View key={c.name} style={styles.legendRow}>
+                <View key={`report-legend-${c.name}-${idx}`} style={styles.legendRow}>
                   <View style={[styles.legendDot, { backgroundColor: c.color }]} />
                   <Text style={styles.legendName}>{c.name}</Text>
                   <Text style={styles.legendValue}>{formatCurrency(c.value)}</Text>

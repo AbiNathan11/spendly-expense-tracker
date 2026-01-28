@@ -52,7 +52,7 @@ function formatDisplayDate(iso: string) {
 }
 
 export function AddBillScreen({ route, navigation }: Props) {
-    const { state, addBill, updateBill } = useBudget();
+    const { state, addBill, updateBill, formatCurrency } = useBudget();
 
     // Check if we are editing an existing bill
     const billId = route.params?.billId;
@@ -100,7 +100,7 @@ export function AddBillScreen({ route, navigation }: Props) {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (!session || sessionError) {
             Alert.alert(
-                "Authentication Required", 
+                "Authentication Required",
                 "Please log in first before adding bills.",
                 [
                     {
@@ -118,7 +118,7 @@ export function AddBillScreen({ route, navigation }: Props) {
 
         try {
             if (isEditing && billId) {
-                await updateBill({
+                updateBill({
                     id: billId,
                     title: title.trim(),
                     amount: amt,
@@ -126,17 +126,17 @@ export function AddBillScreen({ route, navigation }: Props) {
                     envelopeId: envelopeId,
                 });
             } else {
-                await addBill({
+                addBill({
                     title: title.trim(),
                     amount: amt,
                     dueISO: dueDate,
                     envelopeId: envelopeId,
                 });
             }
-
+            // Navigate back immediately for speed
             navigation.goBack();
         } catch (error) {
-            Alert.alert("Error", `Failed to save bill: ${error instanceof Error ? error.message : "Unknown error"}`);
+            Alert.alert("Error", `Failed to start save process.`);
         }
     };
 
@@ -160,7 +160,7 @@ export function AddBillScreen({ route, navigation }: Props) {
                             <TextInput
                                 value={amount}
                                 onChangeText={setAmount}
-                                placeholder="$0.00"
+                                placeholder={formatCurrency(0)}
                                 placeholderTextColor={ui.fieldPh}
                                 keyboardType="numeric"
                                 style={styles.amountInput}
@@ -203,9 +203,9 @@ export function AddBillScreen({ route, navigation }: Props) {
 
                         {pickerOpen && (
                             <View style={styles.pickerList}>
-                                {envelopes.map((e) => (
+                                {envelopes.map((e, idx) => (
                                     <Pressable
-                                        key={e.id}
+                                        key={`ab-env-${e.id || idx}`}
                                         style={styles.pickerItem}
                                         onPress={() => {
                                             setEnvelopeId(e.id);

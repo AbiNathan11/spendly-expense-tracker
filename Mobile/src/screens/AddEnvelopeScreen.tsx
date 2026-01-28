@@ -43,7 +43,7 @@ const colors = [
 ];
 
 export function AddEnvelopeScreen({ navigation, route }: Props) {
-    const { addEnvelope, updateEnvelope, state } = useBudget();
+    const { addEnvelope, updateEnvelope, state, formatCurrency } = useBudget();
     const editId = route.params?.envelopeId;
     const isEditing = !!editId;
 
@@ -76,22 +76,23 @@ export function AddEnvelopeScreen({ navigation, route }: Props) {
 
         try {
             if (isEditing && editId) {
-                await updateEnvelope({
+                updateEnvelope({
                     id: editId,
                     name: name.trim(),
                     budget: amt,
                     color: selectedColor,
                 });
             } else {
-                await addEnvelope({
+                addEnvelope({
                     name: name.trim(),
                     budget: amt,
                     color: selectedColor,
                 });
             }
+            // Navigate back immediately for speed
             navigation.goBack();
         } catch (error) {
-            Alert.alert("Error", "Failed to save envelope. Please try again.");
+            Alert.alert("Error", "Failed to start save process.");
         }
     };
 
@@ -127,7 +128,7 @@ export function AddEnvelopeScreen({ navigation, route }: Props) {
                             <TextInput
                                 value={budget}
                                 onChangeText={setBudget}
-                                placeholder="$0.00"
+                                placeholder={formatCurrency(0)}
                                 placeholderTextColor={ui.fieldPh}
                                 keyboardType="numeric"
                                 style={styles.amountInput}

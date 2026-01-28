@@ -218,7 +218,7 @@ export function BillsScreen() {
               {selectedBills.length === 0 ? (
                 <Text style={styles.empty}>No bills on this day.</Text>
               ) : (
-                selectedBills.map((b) => {
+                selectedBills.map((b, index) => {
                   const { bg, icon, color } = billIcon(b.title);
                   const isToday = sameDay(b.due, today);
                   const isPast = b.due < today && !isToday;
@@ -236,7 +236,7 @@ export function BillsScreen() {
                     };
                   return (
                     <Pressable
-                      key={b.id}
+                      key={`bill-item-${b.id || index}`}
                       style={styles.billRow}
                       onPress={() => navigation.navigate("BillDetail", { billId: b.id })}
                     >
@@ -460,8 +460,8 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    right: 18,
-    bottom: 30,
+    right: 25,
+    bottom: 15,
     width: 64,
     height: 64,
     borderRadius: 32,

@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { Swipeable } from "react-native-gesture-handler";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -28,7 +29,7 @@ const ui = {
 
 
 export function EnvelopeDetailScreen({ route, navigation }: Props) {
-  const { state, refreshEnvelopes, refreshTransactions, formatCurrency } = useBudget();
+  const { state, refreshEnvelopes, refreshTransactions, deleteTransaction, formatCurrency } = useBudget();
   const [refreshing, setRefreshing] = React.useState(false);
 
   useFocusEffect(
@@ -46,6 +47,26 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
     ]);
     setRefreshing(false);
   }, [route.params.envelopeId]);
+
+  const handleDeleteTx = (id: string, title: string) => {
+    Alert.alert(
+      "Delete Transaction",
+      `Are you sure you want to delete "${title}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const success = await deleteTransaction(id);
+            if (!success) {
+              Alert.alert("Error", "Failed to delete transaction.");
+            }
+          }
+        },
+      ]
+    );
+  };
 
   const envelope = state.envelopes.find((e) => e.id === route.params.envelopeId);
 
@@ -138,19 +159,32 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
 
           <Text style={styles.sectionTitle}>Recent Transactions</Text>
           <View style={styles.txList}>
-            {transactions.slice(0, 10).map((t) => (
-              <View key={t.id} style={styles.txCard}>
-                <View style={styles.txLeft}>
-                  <View style={styles.txAvatar}>
-                    <Ionicons name={getTransactionIcon(t.title)} size={20} color={ui.accent} />
+            {transactions.slice(0, 10).map((t, idx) => (
+              <Swipeable
+                key={`ed-tx-swipe-${t.id || idx}`}
+                renderRightActions={() => (
+                  <Pressable
+                    style={styles.deleteAction}
+                    onPress={() => handleDeleteTx(t.id, t.title)}
+                  >
+                    <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                  </Pressable>
+                )}
+                containerStyle={styles.swipeContainer}
+              >
+                <View key={`ed-tx-${t.id || idx}`} style={styles.txCard}>
+                  <View style={styles.txLeft}>
+                    <View style={styles.txAvatar}>
+                      <Ionicons name={getTransactionIcon(t.title)} size={20} color={ui.accent} />
+                    </View>
+                    <View>
+                      <Text style={styles.txTitle}>{t.title}</Text>
+                      <Text style={styles.txMeta}>{formatDateShort(t.dateISO)}</Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.txTitle}>{t.title}</Text>
-                    <Text style={styles.txMeta}>{formatDateShort(t.dateISO)}</Text>
-                  </View>
+                  <Text style={styles.txAmount}>{formatCurrency(t.amount)}</Text>
                 </View>
-                <Text style={styles.txAmount}>{formatCurrency(t.amount)}</Text>
-              </View>
+              </Swipeable>
             ))}
           </View>
         </ScrollView>
@@ -354,5 +388,17 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 6,
+  },
+  swipeContainer: {
+    borderRadius: 20,
+  },
+  deleteAction: {
+    backgroundColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 60,
+    borderRadius: 20,
+    marginLeft: 10,
+    height: "100%",
   },
 });

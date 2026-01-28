@@ -57,21 +57,19 @@ export function ProfileSettingsScreen() {
     setIsEditing(!isEditing);
   };
 
-  const handleSaveChanges = async () => {
-    const success = await updateProfile(
+  const handleSaveChanges = () => {
+    // Call update (this is optimistic in BudgetStore)
+    updateProfile(
       name.trim() || state.user.name,
       email.trim() || state.user.email,
       state.currency
     );
 
-    if (success) {
-      setIsEditing(false);
-      setCurrencyOpen(false);
-      setShowSuccessBanner(true);
-      setTimeout(() => setShowSuccessBanner(false), 3000);
-    } else {
-      Alert.alert("Error", "Failed to update profile.");
-    }
+    // Close editing mode immediately for speed
+    setIsEditing(false);
+    setCurrencyOpen(false);
+    setShowSuccessBanner(true);
+    setTimeout(() => setShowSuccessBanner(false), 3000);
   };
 
   const handleLogout = () => {
@@ -82,7 +80,10 @@ export function ProfileSettingsScreen() {
         style: "destructive",
         onPress: () => {
           logout();
-          navigation.reset({ index: 0, routes: [{ name: "Onboarding" }] });
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Auth", params: { mode: "login" } }],
+          });
         }
       }
     ]);

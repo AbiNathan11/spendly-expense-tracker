@@ -1,18 +1,26 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, Alert } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "../components/Screen";
 import { theme } from "../theme/theme";
+import { API_URL } from "../config/api";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+type ResetPasswordRouteProp = RouteProp<RootStackParamList, "ResetPassword">;
 
 export function ResetPasswordScreen() {
     const navigation = useNavigation<Nav>();
+    const route = useRoute<ResetPasswordRouteProp>();
+    const { email } = route.params;
+
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const handleReset = async () => {
@@ -26,14 +34,45 @@ export function ResetPasswordScreen() {
             return;
         }
 
+        if (password.length < 6) {
+            Alert.alert("Error", "Password must be at least 6 characters long.");
+            return;
+        }
+
         setLoading(true);
-        // TODO: Implement actual password reset logic using token or session
-        setTimeout(() => {
+        try {
+            const response = await fetch(`${API_URL}/auth/reset-password-with-otp`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    email,
+                    newPassword: password,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                Alert.alert(
+                    "Success",
+                    "Your password has been reset successfully!",
+                    [
+                        {
+                            text: "Login",
+                            onPress: () => navigation.navigate("Auth", { mode: "login" }),
+                        },
+                    ]
+                );
+            } else {
+                Alert.alert("Error", data.error || "Failed to reset password.");
+            }
+        } catch (err) {
+            Alert.alert("Error", "Network error. Please try again.");
+        } finally {
             setLoading(false);
-            Alert.alert("Success", "Your password has been reset.", [
-                { text: "Login", onPress: () => navigation.navigate({ name: "Auth", params: { mode: "login" } }) }
-            ]);
-        }, 1500);
+        }
     };
 
     return (
@@ -52,26 +91,52 @@ export function ResetPasswordScreen() {
 
                 <View style={styles.inputWrap}>
                     <Text style={styles.label}>New Password</Text>
-                    <TextInput
-                        style={styles.input}
-                        value={password}
-                        onChangeText={setPassword}
-                        placeholder="New Password"
-                        placeholderTextColor={theme.colors.muted}
-                        secureTextEntry
-                    />
+                    <View style={styles.passwordContainer}>
+                        <TextInput
+                            style={styles.input}
+                            value={password}
+                            onChangeText={setPassword}
+                            placeholder="Enter new password"
+                            placeholderTextColor={theme.colors.muted}
+                            secureTextEntry={!showPassword}
+                            autoCapitalize="none"
+                        />
+                        <Pressable
+                            onPress={() => setShowPassword(!showPassword)}
+                            style={styles.eyeIcon}
+                        >
+                            <Ionicons
+                                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                                size={20}
+                                color={theme.colors.muted}
+                            />
+                        </Pressable>
+                    </View>
                 </View>
 
                 <View style={styles.inputWrap}>
                     <Text style={styles.label}>Confirm Password</Text>
-                    <TextInput
-                        style={styles.input}
-                        value={confirmPassword}
-                        onChangeText={setConfirmPassword}
-                        placeholder="Confirm Password"
-                        placeholderTextColor={theme.colors.muted}
-                        secureTextEntry
-                    />
+                    <View style={styles.passwordContainer}>
+                        <TextInput
+                            style={styles.input}
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
+                            placeholder="Confirm new password"
+                            placeholderTextColor={theme.colors.muted}
+                            secureTextEntry={!showConfirmPassword}
+                            autoCapitalize="none"
+                        />
+                        <Pressable
+                            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                            style={styles.eyeIcon}
+                        >
+                            <Ionicons
+                                name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
+                                size={20}
+                                color={theme.colors.muted}
+                            />
+                        </Pressable>
+                    </View>
                 </View>
 
                 <Pressable
@@ -89,10 +154,13 @@ export function ResetPasswordScreen() {
 const styles = StyleSheet.create({
     screen: {
         paddingHorizontal: theme.spacing.lg,
+        alignItems: "center",
     },
     header: {
         paddingTop: theme.spacing.md,
         marginBottom: theme.spacing.lg,
+        width: "100%",
+        maxWidth: 400,
     },
     backBtn: {
         width: 40,
@@ -101,6 +169,8 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
+        width: "90%",
+        maxWidth: 400,
     },
     title: {
         fontSize: 28,
@@ -123,15 +193,25 @@ const styles = StyleSheet.create({
         color: theme.colors.text,
         marginBottom: 8,
     },
+    passwordContainer: {
+        position: "relative",
+    },
     input: {
         height: 52,
         borderWidth: 1,
         borderColor: theme.colors.border,
         borderRadius: theme.radius.md,
         paddingHorizontal: 16,
+        paddingRight: 48,
         fontSize: 16,
         color: theme.colors.text,
         backgroundColor: theme.colors.surface,
+    },
+    eyeIcon: {
+        position: "absolute",
+        right: 16,
+        top: 16,
+        padding: 4,
     },
     btn: {
         height: 56,
