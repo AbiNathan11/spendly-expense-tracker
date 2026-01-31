@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { Screen } from "../components/Screen";
 import { formatMoney } from "../utils/format";
@@ -24,7 +25,7 @@ const ui = {
   success: "#22C55E",
 };
 
-type RangeKey = "month" | "qtr" | "year";
+type RangeKey = "week" | "month" | "qtr" | "year";
 
 function sum(nums: number[]) {
   return nums.reduce((s, n) => s + n, 0);
@@ -100,7 +101,7 @@ function Donut(props: {
       ))}
       <View style={styles.donutHole}>
         <Text style={styles.donutLabel}>Total</Text>
-        <Text style={styles.donutTotal}>{formatMoney(props.total)}</Text>
+        <Text style={styles.donutTotal}>{formatCurrency(props.total)}</Text>
       </View>
     </View>
   );
@@ -219,9 +220,12 @@ export function ReportsScreen() {
               <Text style={styles.headerTitle}>Financial Reports</Text>
               <Text style={styles.headerSubtitle}>{getRangeLabel()}</Text>
             </View>
-            <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)}>
-              <Ionicons name="ellipsis-vertical" size={20} color={ui.text} />
-            </Pressable>
+            <View style={styles.headerRight}>
+              {loading && <ActivityIndicator size="small" color={ui.accent} style={{ marginRight: 10 }} />}
+              <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)}>
+                <Ionicons name="filter" size={20} color={ui.text} />
+              </Pressable>
+            </View>
           </View>
 
           {/* -------- TREND CARD -------- */}

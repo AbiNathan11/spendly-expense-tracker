@@ -16,12 +16,12 @@ type AuthRouteProp = RouteProp<RootStackParamList, "Auth">;
 export function AuthScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<AuthRouteProp>();
-  const { login } = useBudget();
+  const { login, signup, state } = useBudget();
 
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("alex@example.com");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
@@ -31,6 +31,31 @@ export function AuthScreen() {
   }, [route.params?.mode]);
 
   const primaryLabel = mode === "login" ? "Log In" : "Sign Up";
+
+  const handleAuth = async () => {
+    if (!email || !password) {
+      alert("Please fill in all fields");
+      return;
+    }
+
+    if (mode === "signup" && !name) {
+      alert("Please enter your name");
+      return;
+    }
+
+    let success;
+    if (mode === "signup") {
+      success = await signup(email, password, name);
+    } else {
+      success = await login(email, password);
+    }
+
+    if (success) {
+      navigation.replace("AppTabs");
+    } else {
+      alert(state.authError || "Authentication failed");
+    }
+  };
 
   return (
     <Screen>
@@ -98,7 +123,7 @@ export function AuthScreen() {
           <View style={styles.passwordRowHeader}>
             <Text style={styles.label}>Password</Text>
             {mode === "login" && (
-              <Pressable onPress={() => { }}>
+              <Pressable onPress={() => navigation.navigate("ForgotPassword")}>
                 <Text style={styles.forgot}>Forgot Password?</Text>
               </Pressable>
             )}
@@ -121,32 +146,15 @@ export function AuthScreen() {
           </View>
 
           <Pressable
-            onPress={() => {
-              login(email, mode === "signup" ? name : undefined);
-              navigation.replace("AppTabs");
-            }}
-            style={styles.primaryBtn}
+            onPress={handleAuth}
+            style={[styles.primaryBtn, state.authLoading && styles.primaryBtnDisabled]}
+            disabled={state.authLoading}
           >
-            <Text style={styles.primaryText}>{primaryLabel}</Text>
-          </Pressable>
-
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.divider} />
-          </View>
-
-          <Pressable
-            onPress={() => {
-              login(email);
-              navigation.replace("AppTabs");
-            }}
-            style={styles.socialGoogle}
-          >
-            <View style={styles.socialIconBox}>
-              <Ionicons name="logo-google" size={18} color={stylesVars.text} />
-            </View>
-            <Text style={styles.socialGoogleText}>Continue with Google</Text>
+            <Text style={styles.primaryText}>
+              {state.authLoading
+                ? (mode === "login" ? "Logging in..." : "Signing up...")
+                : primaryLabel}
+            </Text>
           </Pressable>
         </View>
 
@@ -287,6 +295,9 @@ const styles = StyleSheet.create({
     backgroundColor: stylesVars.accent,
     alignItems: "center",
     justifyContent: "center",
+  },
+  primaryBtnDisabled: {
+    opacity: 0.6,
   },
   primaryText: {
     fontSize: 16,

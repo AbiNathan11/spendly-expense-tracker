@@ -1,26 +1,57 @@
 /**
- * Bill API Service
+ * Bill Service – Supabase
  */
 
-import { apiService, ApiResponse } from './api';
+import { supabase } from '../config/supabase';
 
 export interface Bill {
-    id: string;
-    user_id: string;
-    name: string;
-    amount: number;
-    due_date: string;
-    category: string;
-    is_recurring: boolean;
-    is_paid: boolean;
-    paid_date?: string;
-    month: number;
-    year: number;
-    created_at: string;
-    updated_at: string;
+  id: string;
+  user_id: string;
+  name: string;
+  amount: number;
+  due_date: string;
+  category: string;
+  is_recurring: boolean;
+  is_paid: boolean;
+  paid_date: string | null;
+  month: number;
+  year: number;
+  created_at: string;
 }
 
-export interface CreateBillData {
+class BillService {
+  /**
+   * Get Bills
+   */
+  async getBills(month?: number, year?: number) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('User not authenticated');
+
+      let query = supabase
+        .from('bills')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (month) query = query.eq('month', month);
+      if (year) query = query.eq('year', year);
+
+      const { data, error } = await query.order('due_date', { ascending: true });
+
+      if (error) throw error;
+      return { data: data as Bill[], error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Create Bill
+   */
+  async createBill(bill: {
     name: string;
     amount: number;
     due_date: string;
@@ -28,73 +59,96 @@ export interface CreateBillData {
     month: number;
     year: number;
     is_recurring?: boolean;
-}
+  }) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-export interface UpdateBillData {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const billToInsert = {
+        ...bill,
+        user_id: user.id,
+        is_paid: false,
+        is_recurring: bill.is_recurring ?? false,
+      };
+
+      const { data, error } = await supabase
+        .from('bills')
+        .insert([billToInsert])
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      return { data: data as Bill, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  /**
+   * Update Bill
+   */
+  async updateBill(id: string, bill: {
     name?: string;
     amount?: number;
     due_date?: string;
     category?: string;
     is_recurring?: boolean;
-}
+  }) {
+    try {
+      const { data, error } = await supabase
+        .from('bills')
+        .update(bill)
+        .eq('id', id)
+        .select()
+        .single();
 
-export interface PayBillData {
-    envelope_id?: string;
-}
-
-class BillService {
-    /**
-     * Get all bills (with optional filters)
-     */
-    async getBills(params?: {
-        month?: number;
-        year?: number;
-        status?: 'paid' | 'unpaid';
-    }): Promise<ApiResponse<Bill[]>> {
-        let endpoint = '/bills';
-
-        if (params) {
-            const queryParams = new URLSearchParams();
-            if (params.month) queryParams.append('month', params.month.toString());
-            if (params.year) queryParams.append('year', params.year.toString());
-            if (params.status) queryParams.append('status', params.status);
-
-            const queryString = queryParams.toString();
-            if (queryString) {
-                endpoint += `?${queryString}`;
-            }
-        }
-
-        return apiService.get<Bill[]>(endpoint);
+      if (error) throw error;
+      return { data: data as Bill, error: null };
+    } catch (error) {
+      return { data: null, error };
     }
+  }
 
-    /**
-     * Create new bill
-     */
-    async createBill(data: CreateBillData): Promise<ApiResponse<Bill>> {
-        return apiService.post<Bill>('/bills', data);
-    }
+  /**
+   * Mark Bill as Paid
+   */
+  async markBillPaid(billId: string, paid: boolean = true) {
+    try {
+      const { error } = await supabase
+        .from('bills')
+        .update({
+          is_paid: paid,
+          paid_date: paid ? new Date().toISOString() : null
+        })
+        .eq('id', billId);
 
-    /**
-     * Update bill
-     */
-    async updateBill(id: string, data: UpdateBillData): Promise<ApiResponse<Bill>> {
-        return apiService.put<Bill>(`/bills/${id}`, data);
+      if (error) throw error;
+      return { success: true, error: null };
+    } catch (error) {
+      return { success: false, error };
     }
+  }
 
-    /**
-     * Delete bill
-     */
-    async deleteBill(id: string): Promise<ApiResponse<any>> {
-        return apiService.delete(`/bills/${id}`);
+  /**
+   * Delete Bill
+   */
+  async deleteBill(billId: string) {
+    try {
+      const { error } = await supabase.from('bills').delete().eq('id', billId);
+      if (error) throw error;
+      return { success: true, error: null };
+    } catch (error) {
+      return { success: false, error };
     }
-
-    /**
-     * Mark bill as paid
-     */
-    async markBillPaid(id: string, data?: PayBillData): Promise<ApiResponse<any>> {
-        return apiService.post(`/bills/${id}/pay`, data || {});
-    }
+  }
 }
 
 export const billService = new BillService();

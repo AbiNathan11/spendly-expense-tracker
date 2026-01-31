@@ -13,6 +13,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Screen } from "../components/Screen";
 import { useBudget } from "../state/BudgetStore";
+import { billService } from "../services/billService";
+import { supabase } from "../config/supabase";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddBill">;
@@ -50,16 +52,24 @@ function formatDisplayDate(iso: string) {
 }
 
 export function AddBillScreen({ route, navigation }: Props) {
-    const { state, addBill, updateBill } = useBudget();
+    const { state, addBill, updateBill, formatCurrency } = useBudget();
 
     // Check if we are editing an existing bill
     const billId = route.params?.billId;
     const editingBill = useMemo(() => state.bills.find(b => b.id === billId), [state.bills, billId]);
     const isEditing = !!editingBill;
 
+    // Helper function to format date as YYYY-MM-DD without timezone issues
+    const formatDateForStorage = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const defaultDate = route.params?.date
-        ? new Date(route.params.date).toISOString()
-        : (editingBill ? editingBill.dueISO : new Date().toISOString());
+        ? formatDateForStorage(new Date(route.params.date))
+        : (editingBill ? editingBill.dueISO : formatDateForStorage(new Date()));
 
     const [envelopeId, setEnvelopeId] = useState(editingBill?.envelopeId ?? state.envelopes[0]?.id ?? "");
     const [title, setTitle] = useState(editingBill?.title ?? "");
@@ -70,7 +80,7 @@ export function AddBillScreen({ route, navigation }: Props) {
     const envelopes = useMemo(() => state.envelopes, [state.envelopes]);
     const selectedEnvelope = envelopes.find((e) => e.id === envelopeId);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const amt = Number(amount);
 
         if (!title.trim()) {
@@ -86,24 +96,48 @@ export function AddBillScreen({ route, navigation }: Props) {
             return;
         }
 
-        if (isEditing && billId) {
-            updateBill({
-                id: billId,
-                title: title.trim(),
-                amount: amt,
-                dueISO: dueDate,
-                envelopeId: envelopeId,
-            });
-        } else {
-            addBill({
-                title: title.trim(),
-                amount: amt,
-                dueISO: dueDate,
-                envelopeId: envelopeId,
-            });
+        // Check authentication first
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (!session || sessionError) {
+            Alert.alert(
+                "Authentication Required",
+                "Please log in first before adding bills.",
+                [
+                    {
+                        text: "Cancel",
+                        style: "cancel"
+                    },
+                    {
+                        text: "Go to Login",
+                        onPress: () => navigation.navigate("Login" as any)
+                    }
+                ]
+            );
+            return;
         }
 
-        navigation.goBack();
+        try {
+            if (isEditing && billId) {
+                updateBill({
+                    id: billId,
+                    title: title.trim(),
+                    amount: amt,
+                    dueISO: dueDate,
+                    envelopeId: envelopeId,
+                });
+            } else {
+                addBill({
+                    title: title.trim(),
+                    amount: amt,
+                    dueISO: dueDate,
+                    envelopeId: envelopeId,
+                });
+            }
+            // Navigate back immediately for speed
+            navigation.goBack();
+        } catch (error) {
+            Alert.alert("Error", `Failed to start save process.`);
+        }
     };
 
     return (
@@ -126,7 +160,7 @@ export function AddBillScreen({ route, navigation }: Props) {
                             <TextInput
                                 value={amount}
                                 onChangeText={setAmount}
-                                placeholder="$0.00"
+                                placeholder={formatCurrency(0)}
                                 placeholderTextColor={ui.fieldPh}
                                 keyboardType="numeric"
                                 style={styles.amountInput}
@@ -169,9 +203,9 @@ export function AddBillScreen({ route, navigation }: Props) {
 
                         {pickerOpen && (
                             <View style={styles.pickerList}>
-                                {envelopes.map((e) => (
+                                {envelopes.map((e, idx) => (
                                     <Pressable
-                                        key={e.id}
+                                        key={`ab-env-${e.id || idx}`}
                                         style={styles.pickerItem}
                                         onPress={() => {
                                             setEnvelopeId(e.id);

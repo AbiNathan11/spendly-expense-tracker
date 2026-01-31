@@ -22,7 +22,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // Routes
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', message: 'Spendly API is running' });
+  res.status(200).json({ status: 'OK', message: 'Spendly API is running' });
 });
 app.use('/api/auth', authRoutes);
 app.use('/api/envelopes', envelopeRoutes);
@@ -36,18 +36,18 @@ app.get('/api/profile', authenticateUser, (req, res) => {
 });
 // Error handling
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({
-        success: false,
-        error: err.message || 'Something went wrong!'
-    });
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    error: err.message || 'Something went wrong!'
+  });
 });
 // 404 handler
 app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        error: 'Route not found'
-    });
+  res.status(404).json({
+    success: false,
+    error: 'Route not found'
+  });
 });
 // Test database connection
 async function testDbConnection() {
@@ -60,9 +60,10 @@ async function testDbConnection() {
 }
 testDbConnection();
 // Start server
-app.listen(PORT, () => {
-    console.log(`🚀 Spendly API server running on port ${PORT}`);
-    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Spendly API server running on port ${PORT}`);
+  console.log(`Listen on 0.0.0.0`);
+  console.log(`📊 Health check: http://localhost:${PORT}/health`);
 });
 console.log("Supabase URL:", process.env.SUPABASE_URL);
 module.exports = app;

@@ -2,6 +2,9 @@ export type RootStackParamList = {
   Splash: undefined;
   Onboarding: undefined;
   Auth: { mode?: "login" | "signup" };
+  ForgotPassword: undefined;
+  VerifyOTP: { email: string };
+  ResetPassword: { email: string };
   AppTabs: undefined;
 
   EnvelopeDetail: { envelopeId: string };

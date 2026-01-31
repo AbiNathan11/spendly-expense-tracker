@@ -63,7 +63,7 @@ export function OnboardingScreen() {
   };
 
   return (
-    <Screen padded={false} style={styles.screen}>
+    <Screen padded={false} ignoreSafe style={[styles.screen, { backgroundColor: ui.bg }]}>
       <View style={styles.container}>
         {/* Illustration Area */}
         <View style={styles.illustrationArea}>
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between", // Spread left and right
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl,
+    paddingBottom: 60,
     paddingTop: theme.spacing.md,
   },
   dots: {

@@ -1,12 +1,27 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, Modal, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { Pressable, ScrollView, StyleSheet, Text, View, Modal, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, RefreshControl } from "react-native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Screen } from "../components/Screen";
 import { useBudget } from "../state/BudgetStore";
 import { formatMoney } from "../utils/format";
+
+function getEnvelopeIcon(name: string): keyof typeof Ionicons.glyphMap {
+  const lower = name.toLowerCase();
+  if (lower.includes("food") || lower.includes("groceries") || lower.includes("eat") || lower.includes("drink")) return "restaurant-outline";
+  if (lower.includes("transport") || lower.includes("car") || lower.includes("bus") || lower.includes("fuel") || lower.includes("gas") || lower.includes("uber")) return "car-outline";
+  if (lower.includes("entertainment") || lower.includes("movie") || lower.includes("fun") || lower.includes("game") || lower.includes("netflix")) return "film-outline";
+  if (lower.includes("utilit") || lower.includes("bill") || lower.includes("light") || lower.includes("water") || lower.includes("wifi") || lower.includes("phone")) return "flash-outline";
+  if (lower.includes("rent") || lower.includes("house") || lower.includes("home")) return "home-outline";
+  if (lower.includes("shopping") || lower.includes("clothe") || lower.includes("gift")) return "cart-outline";
+  if (lower.includes("health") || lower.includes("med") || lower.includes("doctor") || lower.includes("gym")) return "medical-outline";
+  if (lower.includes("save") || lower.includes("invest") || lower.includes("bank")) return "wallet-outline";
+  if (lower.includes("education") || lower.includes("book") || lower.includes("school") || lower.includes("course")) return "book-outline";
+  return "pricetag-outline";
+}
+
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -26,56 +41,65 @@ const ui = {
   primary: "#223447",
 };
 
+
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
-  const { state, updateDailyLimit, formatCurrency } = useBudget();
+  const { state, updateDailyLimit, formatCurrency, refreshEnvelopes, refreshBills, refreshTransactions } = useBudget();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [limitInput, setLimitInput] = useState("");
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  // Auto-refresh when screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshEnvelopes();
+      refreshBills();
+      refreshTransactions();
+    }, [])
+  );
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([refreshEnvelopes(), refreshBills(), refreshTransactions()]);
+    setRefreshing(false);
+  }, []);
 
   const today = useMemo(() => {
-    const dailyLimit = state.dailyLimit;
-    const spent = state.transactions.reduce((sum, t) => sum + t.amount, 0);
-    const remaining = dailyLimit - spent; // Allow negative
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    // Show 0 if limit wasn't set today
+    const isSetToday = state.lastLimitUpdateDateISO === todayStr;
+    const dailyLimit = isSetToday ? state.dailyLimit : 0;
+
+    // Filter transactions to only those from today (robust check)
+    const todayTransactions = state.transactions.filter(t => t.dateISO && t.dateISO.startsWith(todayStr));
+    const spent = todayTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+    const remaining = dailyLimit - spent;
     const diff = Math.abs(remaining);
-    const isOver = spent > dailyLimit;
+    const isOver = dailyLimit > 0 && spent > dailyLimit;
     const pct = dailyLimit === 0 ? 0 : Math.min(1, spent / dailyLimit);
 
     let color = "#10B981"; // Green
     if (isOver) color = "#EF4444"; // Red
-    else if (spent >= dailyLimit * 0.9) color = "#F59E0B"; // Yellow
+    else if (dailyLimit > 0 && spent >= dailyLimit * 0.9) color = "#F59E0B"; // Yellow
 
     return { dailyLimit, spent, remaining: Math.max(0, remaining), diff, isOver, pct, color };
-  }, [state.transactions, state.dailyLimit]);
+  }, [state.transactions, state.dailyLimit, state.lastLimitUpdateDateISO]);
 
   const cards = useMemo(() => {
     return state.envelopes.map((e) => {
       const left = e.budget - e.spent;
       const overspent = left < 0;
       const pct = e.budget === 0 ? 0 : Math.min(1, e.spent / e.budget);
-      const icon =
-        e.id === "groceries"
-          ? "cart-outline"
-          : e.id === "transport"
-            ? "bus-outline"
-            : e.id === "entertainment"
-              ? "game-controller-outline"
-              : "bulb-outline";
-      const iconBg = overspent ? ui.redSoft : e.id === "transport" ? ui.yellowSoft : ui.greenSoft;
+      const icon = getEnvelopeIcon(e.name);
+      const iconBg = e.color + '20';
 
       let barColor = "#10B981"; // Green
-      if (e.spent > e.budget) barColor = "#EF4444"; // Red
-      else if (e.spent >= e.budget * 0.9) barColor = "#F59E0B"; // Yellow
-      else barColor = ui.accent; // Or keep ui.accent? The user asked for envelope screen colors. 
-      // User request "the progress bar in the envelops should be...". 
-      // This is HomeScreen cards, maybe consistent logic is good. 
-      // "and become red after over the limit in the envelops screen".
-      // I'll stick to a simple color here unless requested, but Green/Red logic matches nicely.
-      // Actually previous logic was: overspent ? "#F87171" : ...
-      // I'll update this one too to be consistent.
       if (overspent) barColor = "#EF4444";
       else if (e.spent >= e.budget * 0.9) barColor = "#F59E0B";
-      else barColor = "#10B981"; // Green default
 
       return { e, left, overspent, pct, icon, iconBg, barColor };
     });
@@ -90,16 +114,30 @@ export function HomeScreen() {
     }).length;
   }, [state.bills]);
 
+  const isLocked = useMemo(() => {
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return state.lastLimitUpdateDateISO === todayStr;
+  }, [state.lastLimitUpdateDateISO]);
+
   const handleOpenLimitModal = () => {
+    if (isLocked) {
+      Alert.alert("Locked", "You've already set your limit for today! You can change it again tomorrow.");
+      return;
+    }
     setLimitInput(state.dailyLimit.toString());
     setModalVisible(true);
   };
 
-  const handleSaveLimit = () => {
+  const handleSaveLimit = async () => {
     const val = parseFloat(limitInput);
     if (!isNaN(val) && val > 0) {
-      updateDailyLimit(val);
-      setModalVisible(false);
+      try {
+        await updateDailyLimit(val);
+        setModalVisible(false);
+      } catch (error: any) {
+        Alert.alert("Locked", error.message || "Daily limit can only be set once per day.");
+      }
     } else {
       Alert.alert("Invalid Input", "Please enter a valid positive number.");
     }
@@ -108,7 +146,13 @@ export function HomeScreen() {
   return (
     <Screen padded={false} style={styles.screen}>
       <View style={styles.page}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           {/* Header */}
           <View style={styles.header}>
             <Pressable
@@ -140,65 +184,91 @@ export function HomeScreen() {
 
           <Pressable onPress={handleOpenLimitModal}>
             <View style={styles.todayCard}>
-              <View style={styles.todayRow}>
-                <Text style={styles.todayLabel}>Spent</Text>
-                <Text style={styles.todayValue}>
-                  <Text style={styles.todayValueStrong}>{formatCurrency(today.spent)}</Text>
-                  <Text style={styles.todayValueMuted}>{` of ${formatCurrency(today.dailyLimit)}`}</Text>
-                </Text>
+              <View style={styles.todayHeader}>
+                <View style={styles.todayHeaderLeft}>
+                  <Text style={styles.todayLabel}>Daily Limit</Text>
+                  <Text style={styles.todayLimitValue}>{formatCurrency(today.dailyLimit)}</Text>
+                </View>
+                <View style={styles.editIconCircle}>
+                  <Ionicons name={isLocked ? "lock-closed" : "pencil"} size={14} color={ui.accent} />
+                </View>
               </View>
-              <View style={styles.todayTrack}>
-                <View style={[styles.todayFill, { width: `${today.pct * 100}%`, backgroundColor: today.color }]} />
+
+              <View style={styles.todayMain}>
+                <View style={styles.todayRow}>
+                  <Text style={styles.spentLabel}>Spent Today</Text>
+                  <Text style={styles.spentValue}>{formatCurrency(today.spent)}</Text>
+                </View>
+
+                <View style={styles.todayTrack}>
+                  <View style={[styles.todayFill, { width: `${today.pct * 100}%`, backgroundColor: today.color }]} />
+                </View>
+
+                <View style={styles.todayRow}>
+                  <Text style={styles.remainingLabel}>
+                    {today.isOver ? "Over Limit" : "Remaining"}
+                  </Text>
+                  <Text style={[styles.remainingValue, { color: today.isOver ? "#EF4444" : "#10B981" }]}>
+                    {formatCurrency(today.remaining)}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.remaining}>{`${formatCurrency(today.remaining)} remaining`}</Text>
 
               {today.isOver && (
                 <View style={styles.warnBox}>
                   <Ionicons name="warning-outline" size={18} color="#B91C1C" />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.warnTitle}>Daily Limit Exceeded!</Text>
-                    <Text style={styles.warnBody}>{`You are ${formatCurrency(today.diff)} over your daily limit.`}</Text>
+                    <Text style={styles.warnTitle}>Budget Exceeded!</Text>
+                    <Text style={styles.warnBody}>{`You've spent ${formatCurrency(today.diff)} more than your daily limit.`}</Text>
                   </View>
                 </View>
               )}
-
-
             </View>
           </Pressable>
 
           <Text style={styles.h2}>Your Envelopes</Text>
 
-          <View style={styles.grid}>
-            {cards.map(({ e, left, overspent, pct, icon, iconBg, barColor }) => (
-              <Pressable
-                key={e.id}
-                style={styles.envelopeCard}
-                onPress={() => navigation.navigate("EnvelopeDetail", { envelopeId: e.id })}
-              >
-                <View style={styles.envelopeTop}>
-                  <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
-                    <Ionicons name={icon as any} size={18} color={overspent ? "#F87171" : "#3B556B"} />
+          {cards.length === 0 ? (
+            <View style={styles.emptyEnvelopes}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="mail-open-outline" size={28} color={ui.muted} />
+              </View>
+              <Text style={styles.emptyTitle}>No Envelopes Yet</Text>
+              <Text style={styles.emptySubtitle}>Start by creating an envelope to track your spending categories.</Text>
+            </View>
+          ) : (
+            <View style={styles.grid}>
+              {cards.map(({ e, left, overspent, pct, icon, iconBg, barColor }, index) => (
+                <Pressable
+                  key={`home-env-${e.id || index}`}
+                  style={styles.envelopeCard}
+                  onPress={() => navigation.navigate("EnvelopeDetail", { envelopeId: e.id })}
+                >
+                  <View style={styles.envelopeTop}>
+                    <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
+                      <Ionicons name={icon as any} size={18} color={e.color} />
+                    </View>
+                    {overspent ? (
+                      <Ionicons name="lock-closed-outline" size={16} color="#F87171" />
+                    ) : null}
                   </View>
+
+                  <Text style={styles.envelopeName}>{e.name}</Text>
                   {overspent ? (
-                    <Ionicons name="lock-closed-outline" size={16} color="#F87171" />
-                  ) : null}
-                </View>
+                    <Text style={[styles.envelopeMeta, { color: "#F87171" }]}>{`${formatCurrency(
+                      Math.abs(left)
+                    )} overspent`}</Text>
+                  ) : (
+                    <Text style={styles.envelopeMeta}>{`${formatCurrency(left)} left of ${formatCurrency(e.budget)}`}</Text>
+                  )}
 
-                <Text style={styles.envelopeName}>{e.name}</Text>
-                {overspent ? (
-                  <Text style={[styles.envelopeMeta, { color: "#F87171" }]}>{`${formatCurrency(
-                    Math.abs(left)
-                  )} overspent`}</Text>
-                ) : (
-                  <Text style={styles.envelopeMeta}>{`${formatCurrency(left)} left of ${formatCurrency(e.budget)}`}</Text>
-                )}
-
-                <View style={styles.barTrack}>
-                  <View style={[styles.barFill, { width: `${pct * 100}%`, backgroundColor: barColor }]} />
-                </View>
-              </Pressable>
-            ))}
-          </View>
+                  <View style={styles.barTrack}>
+                    <View style={[styles.barFill, { width: `${pct * 100}%`, backgroundColor: barColor }]} />
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          )}
         </ScrollView>
       </View>
 
@@ -297,54 +367,74 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 2,
   },
-  todayRow: {
+  todayHeader: {
     flexDirection: "row",
-    alignItems: "baseline",
     justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: ui.border,
+    marginBottom: 16,
+  },
+  todayHeaderLeft: {
+    gap: 2,
   },
   todayLabel: {
     color: ui.muted,
+    fontSize: 12,
     fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
-  todayValue: {
+  todayLimitValue: {
     color: ui.text,
-  },
-  todayValueStrong: {
-    color: ui.text,
+    fontSize: 22,
     fontWeight: "900",
-    fontSize: 18,
   },
-  todayValueMuted: {
+  editIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: ui.bg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  todayMain: {
+    gap: 12,
+  },
+  todayRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  spentLabel: {
+    color: ui.text,
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  spentValue: {
+    color: ui.text,
+    fontWeight: "800",
+    fontSize: 15,
+  },
+  remainingLabel: {
     color: ui.muted,
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: 13,
+  },
+  remainingValue: {
+    fontWeight: "800",
+    fontSize: 15,
   },
   todayTrack: {
-    marginTop: 12,
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: ui.track,
     overflow: "hidden",
   },
   todayFill: {
     height: "100%",
-    backgroundColor: ui.accent,
-    borderRadius: 3,
-  },
-  remaining: {
-    marginTop: 10,
-    textAlign: "right",
-    color: ui.accent,
-    fontWeight: "800",
-  },
-  editHint: {
-    marginTop: 8,
-    alignItems: "center",
-  },
-  editHintText: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    fontWeight: "500",
+    borderRadius: 4,
   },
   h2: {
     marginTop: 26,
@@ -510,5 +600,39 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: "600",
     lineHeight: 18,
+  },
+  emptyEnvelopes: {
+    marginTop: 14,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: ui.border,
+    padding: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: ui.text,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: ui.muted,
+    textAlign: "center",
+    lineHeight: 20,
+    fontWeight: "600",
+    marginBottom: 0,
+    paddingHorizontal: 20,
   },
 });

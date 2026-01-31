@@ -77,7 +77,7 @@ export function SplashScreen() {
   });
 
   return (
-    <Screen padded={false} style={styles.screen}>
+    <Screen padded={false} ignoreSafe style={[styles.screen, { backgroundColor: '#223447' }]}>
       <TouchableWithoutFeedback onPress={handlePress}>
         <View style={{ flex: 1 }}>
           <LinearGradient

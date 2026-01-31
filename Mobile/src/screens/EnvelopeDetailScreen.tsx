@@ -1,5 +1,7 @@
 import React, { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { Swipeable } from "react-native-gesture-handler";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -7,6 +9,7 @@ import { Screen } from "../components/Screen";
 import { theme } from "../theme/theme";
 import { useBudget } from "../state/BudgetStore";
 import { formatDateShort, formatMoney } from "../utils/format";
+import { getEnvelopeIcon, getTransactionIcon } from "../utils/icons";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EnvelopeDetail">;
@@ -24,26 +27,47 @@ const ui = {
   fab: "#223447",
 };
 
-function envelopeEmoji(id: string) {
-  if (id === "groceries") return "🍔";
-  if (id === "transport") return "🚗";
-  if (id === "entertainment") return "🎬";
-  if (id === "utilities") return "💡";
-  return "💰";
-}
-
-function txEmoji(title: string) {
-  const t = title.toLowerCase();
-  if (t.includes("costco") || t.includes("grocery")) return "🛒";
-  if (t.includes("trader") || t.includes("market")) return "🥑";
-  if (t.includes("coffee")) return "☕";
-  if (t.includes("bus") || t.includes("uber") || t.includes("gas")) return "🚌";
-  if (t.includes("movie") || t.includes("cinema")) return "🎟️";
-  return "💳";
-}
 
 export function EnvelopeDetailScreen({ route, navigation }: Props) {
-  const { state } = useBudget();
+  const { state, refreshEnvelopes, refreshTransactions, deleteTransaction, formatCurrency } = useBudget();
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshEnvelopes();
+      refreshTransactions(route.params.envelopeId);
+    }, [route.params.envelopeId])
+  );
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      refreshEnvelopes(),
+      refreshTransactions(route.params.envelopeId)
+    ]);
+    setRefreshing(false);
+  }, [route.params.envelopeId]);
+
+  const handleDeleteTx = (id: string, title: string) => {
+    Alert.alert(
+      "Delete Transaction",
+      `Are you sure you want to delete "${title}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const success = await deleteTransaction(id);
+            if (!success) {
+              Alert.alert("Error", "Failed to delete transaction.");
+            }
+          }
+        },
+      ]
+    );
+  };
+
   const envelope = state.envelopes.find((e) => e.id === route.params.envelopeId);
 
   const transactions = useMemo(
@@ -68,7 +92,13 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
   return (
     <Screen padded={false} style={styles.screen}>
       <View style={styles.page}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           <View style={styles.header}>
             <Pressable style={styles.headerBtn} onPress={() => navigation.goBack()}>
               <Ionicons name="chevron-back" size={24} color={ui.text} />
@@ -84,24 +114,24 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
 
           <View style={styles.summaryCard}>
             <View style={styles.summaryTop}>
-              <View style={styles.avatarWrap}>
-                <Text style={styles.avatarEmoji}>{envelopeEmoji(envelope.id)}</Text>
+              <View style={[styles.avatarWrap, { backgroundColor: envelope.color + '20' }]}>
+                <Ionicons name={getEnvelopeIcon(envelope.name)} size={30} color={envelope.color} />
               </View>
               <Text style={styles.bigTitle}>{envelope.name}</Text>
             </View>
 
             <View style={styles.kpiRow}>
               <Text style={styles.kpiLabel}>Allocated</Text>
-              <Text style={styles.kpiValue}>{formatMoney(envelope.budget)}</Text>
+              <Text style={styles.kpiValue}>{formatCurrency(envelope.budget)}</Text>
             </View>
             <View style={styles.kpiRow}>
               <Text style={styles.kpiLabel}>Spent</Text>
-              <Text style={styles.kpiValue}>{formatMoney(envelope.spent)}</Text>
+              <Text style={styles.kpiValue}>{formatCurrency(envelope.spent)}</Text>
             </View>
             <View style={styles.kpiRow}>
               <Text style={styles.kpiLabel}>Remaining</Text>
               <Text style={[styles.kpiValue, overspent ? styles.kpiDanger : styles.kpiOk]}>
-                {formatMoney(remaining)}
+                {formatCurrency(remaining)}
               </Text>
             </View>
 
@@ -122,26 +152,39 @@ export function EnvelopeDetailScreen({ route, navigation }: Props) {
             {overspent ? (
               <View style={styles.overspentPill}>
                 <Ionicons name="warning-outline" size={18} color={ui.danger} />
-                <Text style={styles.overspentText}>{`Overspent by ${formatMoney(Math.abs(remaining))}`}</Text>
+                <Text style={styles.overspentText}>{`Overspent by ${formatCurrency(Math.abs(remaining))}`}</Text>
               </View>
             ) : null}
           </View>
 
           <Text style={styles.sectionTitle}>Recent Transactions</Text>
           <View style={styles.txList}>
-            {transactions.slice(0, 10).map((t) => (
-              <View key={t.id} style={styles.txCard}>
-                <View style={styles.txLeft}>
-                  <View style={styles.txAvatar}>
-                    <Text style={styles.txEmoji}>{txEmoji(t.title)}</Text>
+            {transactions.slice(0, 10).map((t, idx) => (
+              <Swipeable
+                key={`ed-tx-swipe-${t.id || idx}`}
+                renderRightActions={() => (
+                  <Pressable
+                    style={styles.deleteAction}
+                    onPress={() => handleDeleteTx(t.id, t.title)}
+                  >
+                    <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                  </Pressable>
+                )}
+                containerStyle={styles.swipeContainer}
+              >
+                <View key={`ed-tx-${t.id || idx}`} style={styles.txCard}>
+                  <View style={styles.txLeft}>
+                    <View style={styles.txAvatar}>
+                      <Ionicons name={getTransactionIcon(t.title)} size={20} color={ui.accent} />
+                    </View>
+                    <View>
+                      <Text style={styles.txTitle}>{t.title}</Text>
+                      <Text style={styles.txMeta}>{formatDateShort(t.dateISO)}</Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.txTitle}>{t.title}</Text>
-                    <Text style={styles.txMeta}>{formatDateShort(t.dateISO)}</Text>
-                  </View>
+                  <Text style={styles.txAmount}>{formatCurrency(t.amount)}</Text>
                 </View>
-                <Text style={styles.txAmount}>{`-${formatMoney(t.amount)}`}</Text>
-              </View>
+              </Swipeable>
             ))}
           </View>
         </ScrollView>
@@ -345,5 +388,17 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 6,
+  },
+  swipeContainer: {
+    borderRadius: 20,
+  },
+  deleteAction: {
+    backgroundColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 60,
+    borderRadius: 20,
+    marginLeft: 10,
+    height: "100%",
   },
 });

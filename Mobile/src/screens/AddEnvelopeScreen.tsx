@@ -43,7 +43,7 @@ const colors = [
 ];
 
 export function AddEnvelopeScreen({ navigation, route }: Props) {
-    const { addEnvelope, updateEnvelope, state } = useBudget();
+    const { addEnvelope, updateEnvelope, state, formatCurrency } = useBudget();
     const editId = route.params?.envelopeId;
     const isEditing = !!editId;
 
@@ -62,7 +62,7 @@ export function AddEnvelopeScreen({ navigation, route }: Props) {
         }
     }, [editId, state.envelopes]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const amt = Number(budget);
 
         if (!name.trim()) {
@@ -74,22 +74,26 @@ export function AddEnvelopeScreen({ navigation, route }: Props) {
             return;
         }
 
-        if (isEditing && editId) {
-            updateEnvelope({
-                id: editId,
-                name: name.trim(),
-                budget: amt,
-                color: selectedColor,
-            });
-        } else {
-            addEnvelope({
-                name: name.trim(),
-                budget: amt,
-                color: selectedColor,
-            });
+        try {
+            if (isEditing && editId) {
+                updateEnvelope({
+                    id: editId,
+                    name: name.trim(),
+                    budget: amt,
+                    color: selectedColor,
+                });
+            } else {
+                addEnvelope({
+                    name: name.trim(),
+                    budget: amt,
+                    color: selectedColor,
+                });
+            }
+            // Navigate back immediately for speed
+            navigation.goBack();
+        } catch (error) {
+            Alert.alert("Error", "Failed to start save process.");
         }
-
-        navigation.goBack();
     };
 
     return (
@@ -124,7 +128,7 @@ export function AddEnvelopeScreen({ navigation, route }: Props) {
                             <TextInput
                                 value={budget}
                                 onChangeText={setBudget}
-                                placeholder="$0.00"
+                                placeholder={formatCurrency(0)}
                                 placeholderTextColor={ui.fieldPh}
                                 keyboardType="numeric"
                                 style={styles.amountInput}

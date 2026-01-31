@@ -3,6 +3,9 @@
  */
 
 import { apiService, ApiResponse } from './api';
+import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
+
 
 export interface Expense {
     id: string;

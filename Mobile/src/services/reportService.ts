@@ -6,6 +6,13 @@ import { apiService, ApiResponse } from './api';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
+// Get the correct directory path for Expo SDK 54
+const getDocumentDirectory = () => {
+    // Type assertion to handle expo-file-system v19 API changes
+    const fs = FileSystem as any;
+    return fs.documentDirectory || fs.cacheDirectory || '';
+};
+
 export interface WeeklyReport {
   period: {
     start: string;
