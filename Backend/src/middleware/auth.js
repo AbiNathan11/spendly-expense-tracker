@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
  * Middleware to verify JWT token from Supabase
  */
 const authenticateUser = async (req, res, next) => {
-    try {
+  try {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -26,7 +26,8 @@ const authenticateUser = async (req, res, next) => {
         error: 'Invalid or expired token'
       });
     }
-     // Attach user to request object
+
+    // Attach user to request object
     req.user = user;
     next();
   } catch (error) {
