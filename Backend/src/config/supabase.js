@@ -13,7 +13,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Admin client for server-side operations (only if service key exists)
-const supabaseAdmin = supabaseServiceKey 
+const supabaseAdmin = supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey)
   : null;
 

@@ -1,0 +1,17 @@
+# QUICK SETUP GUIDE
+
+### 1. Restore Folders (Run in terminal)
+- **Backend**: `cd Backend && npm install`
+- **Mobile**: `cd Mobile && npm install`
+
+### 2. Backend Setup
+- Create `.env` in `Backend/` (Copy from `.env.example`).
+- Run `Backend/database/schema.sql` in your Supabase SQL editor.
+- **Start**: `npm run dev` (inside Backend folder).
+
+### 3. Mobile Setup
+- **API URL**: Open `Mobile/src/config/api.ts` and change the IP to your computer's IP.
+- **Start**: `npx expo start` (inside Mobile folder).
+
+---
+**Note**: Ensure your phone (Expo Go) and PC are on the same Wi-Fi.

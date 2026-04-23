@@ -18,6 +18,14 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 /**
+ * Clear any stale session data
+ */
+export const clearSession = async () => {
+    await supabase.auth.signOut();
+    await AsyncStorage.removeItem('supabase.auth.token');
+};
+
+/**
  * Get current user's JWT token
  */
 export const getAuthToken = async (): Promise<string | null> => {
