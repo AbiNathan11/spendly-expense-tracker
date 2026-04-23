@@ -16,7 +16,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 //const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 // Admin client for server-side operations (only if service key exists)
-const supabaseAdmin = supabaseServiceKey 
+const supabaseAdmin = supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey)
   : null;
 

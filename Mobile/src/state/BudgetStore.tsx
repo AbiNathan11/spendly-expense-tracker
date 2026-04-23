@@ -270,20 +270,31 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   /* 🔹 RESTORE SESSION ON APP START */
   useEffect(() => {
     const restoreSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        console.log("Restored persistent session for:", session.user.email);
-
-        // Populate basic info from session
-        dispatch({
-          type: "AUTH/LOGIN",
-          payload: {
-            email: session.user.email!,
-            name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error("Session restoration error:", error.message);
+          if (error.message.includes('refresh_token') || error.message.includes('Invalid Refresh Token')) {
+             await supabase.auth.signOut();
           }
-        });
+          return;
+        }
 
-        // Backend will re-sync more details (currency etc) on next data load or settings fetch
+        if (session?.user) {
+          console.log("Restored persistent session for:", session.user.email);
+
+          // Populate basic info from session
+          dispatch({
+            type: "AUTH/LOGIN",
+            payload: {
+              email: session.user.email!,
+              name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Failed to restore session:", err);
       }
     };
 
