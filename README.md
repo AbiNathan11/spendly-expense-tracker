@@ -35,16 +35,6 @@ npx expo start
 - Real-time expense reporting
 - Budget management
 
-## API Documentation
-
-See `Backend/API_DOCUMENTATION.md` for detailed API endpoints and usage.
-
-## Architecture
-
-For detailed architecture information, see:
-- `Backend/ARCHITECTURE.md`
-- `Backend/PROJECT_STRUCTURE.md`
-
 ## Development
 
 ### Prerequisites
@@ -59,18 +49,3 @@ For detailed architecture information, see:
 3. Install dependencies in both directories
 4. Start development servers
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-[Add your license information here]
-
-## Support
-
-For issues and questions, please refer to the documentation in respective directories or create an issue in the repository.
